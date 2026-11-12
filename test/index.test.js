@@ -236,6 +236,24 @@ test("the index is disposable: missing, empty, corrupt, deleted, truncated", asy
   index.dispose();
 });
 
+test("an index built under an older corpus definition is rebuilt", async (t) => {
+  const corpus = await basicCorpus();
+  t.after(() => cleanup(corpus));
+  const { index } = makeIndex(corpus);
+  await index.runPass();
+  index.closeHandles();
+  const db = new DatabaseSync(index.dbPath);
+  db.exec("PRAGMA user_version = 1");
+  db.close();
+
+  const stale = await index.search({ query: "rollback" });
+  assert.equal(stale.source, "scan");
+  assert.equal(stale.hits[0].entryId, "m1");
+  await index.runPass();
+  assert.equal((await index.search({ query: "rollback" })).source, "index");
+  index.dispose();
+});
+
 test("rebuild restarts an identical index", async (t) => {
   const corpus = await basicCorpus();
   t.after(() => cleanup(corpus));

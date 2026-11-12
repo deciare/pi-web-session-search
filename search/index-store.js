@@ -7,7 +7,13 @@ import { scanSessions, HITS_PER_SESSION } from "./scanner.js";
 import { activeBranch, readSessionFile } from "./session-file.js";
 import { matchSnippet } from "./snippets.js";
 
-const SCHEMA_VERSION = 1;
+/**
+ * Bump this whenever `predicate.js` changes what is searchable. An index built
+ * under an older definition cannot be repaired incrementally: unchanged sessions
+ * would keep rows for the old corpus, so the version mismatch is what forces a
+ * rebuild.
+ */
+const SCHEMA_VERSION = 2;
 const INSERT_BATCH_ROWS = 250;
 const SYNC_INTERVAL_MS = 5000;
 const MAX_QUERY_TEXT = 64_000;

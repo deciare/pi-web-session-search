@@ -56,7 +56,10 @@ panel has a **Rebuild index** button because that should be ordinary, not a
 support procedure.
 
 - **Schema version** mismatch, or `PRAGMA quick_check` failure at open → the file
-  is closed, deleted, recreated and rebuilt.
+  is closed, deleted, recreated and rebuilt. The version is also the corpus
+  definition's version: it changes whenever `predicate.js` changes what is
+  searchable, because unchanged sessions would otherwise keep rows built under
+  the old rule.
 - **Any statement failure** (`SQLITE_CORRUPT`, `SQLITE_NOTADB`, `SQLITE_IOERR`,
   `SQLITE_READONLY_DBMOVED`, a vanished or replaced file) → the handle is
   dropped, the files are best-effort deleted, the query falls back to the scan,
@@ -207,15 +210,16 @@ node --test test/*.test.js
 PI_WEB_ROOT=/data/home/src/pi-web node scripts/panel-smoke.js
 ```
 
-33 tests: block filtering (thinking and tool output excluded), ask cards and
+34 tests: block filtering (thinking and tool output excluded), ask cards and
 answer notes (including a hidden note and a failed ask), compaction
 exclusion with pre-compaction messages retained, abandoned branches, torn last
 lines, the raw-line prefilter's safety conditions, snippet offsets, per-session
 caps and scan truncation, archive marking and the live-copy preference,
 incremental appends, branch-change reindexing, same-size rewrites, an emptied
 transcript, a path reused by another session, naming, durability against a
-missing/empty/corrupt/deleted/truncated index file, rebuild equivalence, dropped
-sessions, index/scan agreement across queries, and cursor paging without gaps.
+missing/empty/corrupt/deleted/truncated index file, a rebuild after a corpus
+version change, rebuild equivalence, dropped sessions, index/scan agreement
+across queries, and cursor paging without gaps.
 
 The browser half has no unit tests — it is one custom element and a
 contribution. `scripts/panel-smoke.js` renders it in the pi-web checkout's
