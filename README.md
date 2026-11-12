@@ -38,7 +38,7 @@ A file that shrank, was rewritten, moved or opened a new branch is rebuilt from 
 
 ## Installing and upgrading
 
-Copy this directory into the pi-web plugins directory (`$PI_WEB_DATA_DIR/plugins/session-search/`), then restart the session daemon and reload the page. The server half loads inside the daemon, so it is discovered at daemon start; restarting interrupts live sessions, so choose a quiet moment. Upgrading is the same two steps.
+Copy this directory into the pi-web plugins directory (`$PI_WEB_DATA_DIR/plugins/session-search/`), then restart the session daemon and reload the page. From a checkout, `node scripts/install.js <plugins directory>` performs that copy; it refuses to overwrite anything it does not recognise as this plugin. Upgrading is the same two steps. The server half loads inside the daemon, so it is discovered at daemon start; restarting interrupts live sessions, so choose a quiet moment.
 
 The plugin can be disabled like any other in **Settings → Plugins**, and it needs no permissions of its own: it asks the daemon, which already owns the transcripts. It searches the machine it runs on, so a remote machine is searched by its own copy of the plugin.
 
