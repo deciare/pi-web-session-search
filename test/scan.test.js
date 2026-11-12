@@ -92,6 +92,25 @@ test("a hidden custom message and a failed ask are outside the corpus", async (t
   assert.equal((await scanSessions(corpus, query("narwhal"))).total, 0);
 });
 
+test("a phrase across two text blocks matches only with the separator it was joined with", async (t) => {
+  const corpus = await makeCorpus();
+  t.after(() => cleanup(corpus));
+  await writeSession(corpus, "a.jsonl", [
+    sessionHeader("s1"),
+    contentMessage("m1", null, "assistant", [
+      { type: "text", text: "alpha" },
+      { type: "thinking", thinking: "between" },
+      { type: "text", text: "beta" },
+    ]),
+  ]);
+  // The join is a blank line, so a phrase spanning the seam must contain one.
+  // Such a query is not printable text: it disables the raw-line prefilter
+  // rather than slipping past it, which is what keeps the scan complete.
+  assert.equal((await scanSessions(corpus, { query: "alpha\n\nbeta", includeArchived: true })).total, 1);
+  assert.equal((await scanSessions(corpus, { query: "alphabeta", includeArchived: true })).total, 0);
+  assert.equal((await scanSessions(corpus, { query: "alpha beta", includeArchived: true })).total, 0);
+});
+
 test("pre-compaction messages stay searchable", async (t) => {
   const corpus = await makeCorpus();
   t.after(() => cleanup(corpus));

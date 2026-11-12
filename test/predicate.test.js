@@ -59,12 +59,16 @@ test("the raw-line prefilter is safe for plain ASCII and refuses escaped charact
   assert.equal(lineMayMatch(quoted, undefined), true);
 });
 
-test("a multi-block message is parsed even when the prefilter misses", () => {
+test("the prefilter is only trusted for text that appears verbatim in the file", () => {
   const line = JSON.stringify({
     type: "message", id: "m1", parentId: null,
-    message: { role: "assistant", content: [{ type: "text", text: "alpha" }, { type: "text", text: "beta" }] },
+    message: { role: "assistant", content: [{ type: "text", text: "alpha\"quoted\"" }] },
   });
-  assert.equal(lineMayMatch(line, "alphabeta"), true);
+  // `undefined` means "parse everything": it is how a query with a control
+  // character, a quote or a backslash bypasses the shortcut.
+  assert.equal(lineMayMatch(line, undefined), true);
+  assert.equal(lineMayMatch(line, "alpha"), true);
+  assert.equal(lineMayMatch(line, "absent"), false);
 });
 
 test("snippet offsets mark the match in the original text", () => {

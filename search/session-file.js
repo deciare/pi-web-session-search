@@ -1,5 +1,5 @@
 import { readLines } from "./jsonl.js";
-import { entrySearchText, isRecord, TEXT_BLOCK_MARKER } from "./predicate.js";
+import { entrySearchText, isRecord } from "./predicate.js";
 
 const LINK_PATTERN = /^\{"type":"([a-z_]+)","id":"([^"]+)","parentId":(null|"([^"]+)")/u;
 
@@ -115,28 +115,18 @@ export function entryLink(line) {
 /**
  * The scan's cheap test: may this line contain a match?
  *
- * A line is worth parsing when the raw bytes contain the needle (the text is
- * stored verbatim, so a line without it cannot contain the term), or when the
- * message has more than one text block and the query could span the join
- * between them. Every other line is skipped without JSON parsing, which is
- * what keeps tool output out of the scan's cost.
+ * A line is worth parsing when the raw bytes contain the needle. That is sound
+ * as long as the needle is a lowercased run of printable ASCII with no quote or
+ * backslash: such a run cannot cross one of the joins the predicate builds,
+ * because every join is a line break. A query that does contain a control
+ * character, a quote or a backslash is passed as `undefined`, which parses
+ * every line rather than trusting the shortcut.
  *
  * @param {string} line
- * @param {string} needle lowercased query, or undefined to always parse
+ * @param {string | undefined} needle lowercased query, or undefined to always parse
  */
 export function lineMayMatch(line, needle) {
-  if (needle === undefined) return true;
-  if (line.toLowerCase().includes(needle)) return true;
-  return countOccurrences(line, TEXT_BLOCK_MARKER) > 1;
-}
-
-function countOccurrences(haystack, needle) {
-  let count = 0;
-  for (let index = haystack.indexOf(needle); index !== -1; index = haystack.indexOf(needle, index + 1)) {
-    count += 1;
-    if (count > 1) return count;
-  }
-  return count;
+  return needle === undefined || line.toLowerCase().includes(needle);
 }
 
 function tryParse(text) {

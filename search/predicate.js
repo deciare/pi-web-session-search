@@ -11,9 +11,6 @@
  * transcript keeps hidden.
  */
 
-/** Raw marker used by the scan's cheap "is there more than one text block" test. */
-export const TEXT_BLOCK_MARKER = '"type":"text"';
-
 const ASK_USER_TOOL = "ask_user";
 
 const SEARCHABLE_ROLES = new Set(["user", "assistant"]);
