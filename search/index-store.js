@@ -315,6 +315,9 @@ export class SearchIndex {
   // -------------------------------------------------------------- durability
 
   openHandles() {
+    // A cached handle can outlive the file it points at: a deleted, truncated or
+    // replaced index must be noticed before it is written to again.
+    if (this.handles !== undefined && !this.handlesMatchFile()) this.closeHandles();
     if (this.handles !== undefined) return this.handles;
     mkdirSync(this.dataDirectory, { recursive: true });
     const existing = statSync(this.dbPath, { throwIfNoEntry: false });
@@ -353,12 +356,14 @@ export class SearchIndex {
 
   readHandle() {
     const handles = this.openHandles();
-    const info = statSync(this.dbPath, { throwIfNoEntry: false });
-    if (info === undefined || info.size === 0
-      || this.identity === undefined || info.dev !== this.identity.dev || info.ino !== this.identity.ino) {
-      throw new Error("index file changed or disappeared");
-    }
+    if (!this.handlesMatchFile()) throw new Error("index file changed or disappeared");
     return handles;
+  }
+
+  handlesMatchFile() {
+    const info = statSync(this.dbPath, { throwIfNoEntry: false });
+    return info !== undefined && info.size > 0 && this.identity !== undefined
+      && info.dev === this.identity.dev && info.ino === this.identity.ino;
   }
 
   closeHandles() {

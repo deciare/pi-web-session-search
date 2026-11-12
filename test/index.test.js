@@ -254,6 +254,21 @@ test("an index built under an older corpus definition is rebuilt", async (t) => 
   index.dispose();
 });
 
+test("a background pass notices a deleted index and starts over", async (t) => {
+  const corpus = await basicCorpus();
+  t.after(() => cleanup(corpus));
+  const { index } = makeIndex(corpus);
+  await index.runPass();
+  await rm(index.dbPath, { force: true });
+  await rm(`${index.dbPath}-wal`, { force: true });
+  await rm(`${index.dbPath}-shm`, { force: true });
+  await index.runPass();
+  const result = await index.search({ query: "rollback" });
+  assert.equal(result.source, "index");
+  assert.equal(result.hits[0].entryId, "m1");
+  index.dispose();
+});
+
 test("rebuild restarts an identical index", async (t) => {
   const corpus = await basicCorpus();
   t.after(() => cleanup(corpus));
