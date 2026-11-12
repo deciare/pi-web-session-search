@@ -10,6 +10,8 @@
  */
 
 export const SEARCH_OPERATION = "search";
+export const LIST_OPERATION = "list";
+export const HISTORY_OPERATION = "history";
 export const REBUILD_INDEX_OPERATION = "rebuild-index";
 export const INDEX_STATUS_OPERATION = "index-status";
 export const CONFIG_OPERATION = "config";
@@ -17,6 +19,8 @@ export const SET_CONFIG_OPERATION = "set-config";
 
 export const OPERATIONS = Object.freeze([
   SEARCH_OPERATION,
+  LIST_OPERATION,
+  HISTORY_OPERATION,
   REBUILD_INDEX_OPERATION,
   INDEX_STATUS_OPERATION,
   CONFIG_OPERATION,

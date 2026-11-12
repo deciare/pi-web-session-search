@@ -19,6 +19,8 @@ test("the server handles exactly the published list", () => {
   const published = new Set(OPERATIONS);
   for (const constant of [
     server.SEARCH_OPERATION,
+    server.LIST_OPERATION,
+    server.HISTORY_OPERATION,
     server.REBUILD_INDEX_OPERATION,
     server.INDEX_STATUS_OPERATION,
     server.CONFIG_OPERATION,
@@ -26,7 +28,7 @@ test("the server handles exactly the published list", () => {
   ]) {
     assert.ok(published.has(constant), constant);
   }
-  assert.equal(published.size, 5);
+  assert.equal(published.size, 7);
 });
 
 test("the host's rule is the one the error message quotes", () => {

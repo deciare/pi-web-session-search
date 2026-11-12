@@ -1,11 +1,16 @@
 import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { readLines } from "./jsonl.js";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { folderViews, foldersOf, projectFor, readCatalog } from "./catalog.js";
 import { listCandidates } from "./corpus.js";
 import { decodeCursor, encodeCursor, queryFingerprint } from "./cursor.js";
+import { buildSessionList, parseListInput } from "./listing.js";
 import { scanSessions } from "./scanner.js";
 import { activeBranch, readSessionFile } from "./session-file.js";
 import { matchSnippet } from "./snippets.js";
+import { readSummariesFromFiles } from "./summaries.js";
+import { buildHistory, parseHistoryInput, readTranscript } from "./transcript.js";
 
 /**
  * Bump this whenever `predicate.js` changes what is searchable. An index built
@@ -13,7 +18,7 @@ import { matchSnippet } from "./snippets.js";
  * would keep rows for the old corpus, so the version mismatch is what forces a
  * rebuild.
  */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const INSERT_BATCH_ROWS = 250;
 const SYNC_INTERVAL_MS = 5000;
 const MAX_QUERY_TEXT = 64_000;
@@ -28,6 +33,7 @@ CREATE TABLE IF NOT EXISTS sync_state(
   mtime_ms   INTEGER NOT NULL,
   indexed_bytes INTEGER NOT NULL,
   leaf_id    TEXT,
+  created    TEXT,
   cwd        TEXT,
   name       TEXT,
   archived   INTEGER NOT NULL DEFAULT 0,
@@ -45,12 +51,12 @@ PRAGMA user_version = ${SCHEMA_VERSION};
 `;
 
 const UPSERT_SYNC = `
-INSERT INTO sync_state(session_id, path, size, mtime_ms, indexed_bytes, leaf_id, cwd, name, archived, updated_ms)
-VALUES(?,?,?,?,?,?,?,?,?,?)
+INSERT INTO sync_state(session_id, path, size, mtime_ms, indexed_bytes, leaf_id, created, cwd, name, archived, updated_ms)
+VALUES(?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(session_id) DO UPDATE SET
   path = excluded.path, size = excluded.size, mtime_ms = excluded.mtime_ms,
-  indexed_bytes = excluded.indexed_bytes, leaf_id = excluded.leaf_id, cwd = excluded.cwd,
-  name = excluded.name, archived = excluded.archived, updated_ms = excluded.updated_ms`;
+  indexed_bytes = excluded.indexed_bytes, leaf_id = excluded.leaf_id, created = excluded.created,
+  cwd = excluded.cwd, name = excluded.name, archived = excluded.archived, updated_ms = excluded.updated_ms`;
 
 const PAGE_SQL = (cursor) => `
 WITH matched AS (
@@ -210,6 +216,87 @@ export class SearchIndex {
       total: this.build.total,
       rebuilding: !this.completeSinceRestart,
     };
+  }
+
+  /** The session catalog: index rows when the index is current, files otherwise. */
+  async listSessions(rawInput) {
+    const input = parseListInput(rawInput);
+    const catalog = await readCatalog(this.corpus.dataDir);
+    let summaries;
+    if (this.completeSinceRestart && !this.permanentlyUnusable) {
+      try {
+        summaries = this.summariesFromIndex();
+      } catch (error) {
+        this.fail(error);
+      }
+    }
+    summaries ??= await readSummariesFromFiles(this.corpus);
+    return buildSessionList(summaries, input, catalog);
+  }
+
+  /** One session's transcript, shaped and bounded. */
+  async readHistory(rawInput) {
+    const input = parseHistoryInput(rawInput);
+    const catalog = await readCatalog(this.corpus.dataDir);
+    const resolved = await this.resolveSession(input.sessionId);
+    if (resolved === undefined) throw new Error(`session ${input.sessionId} was not found on this machine`);
+    const transcript = await readTranscript(resolved.path);
+    const cwd = transcript.header?.cwd;
+    const project = projectFor(cwd, catalog.projects);
+    const session = {
+      id: input.sessionId,
+      ...(transcript.name === undefined || transcript.name === "" ? {} : { name: transcript.name }),
+      ...(cwd === undefined ? {} : { cwd }),
+      ...(transcript.header?.created === undefined ? {} : { created: transcript.header.created }),
+      archived: resolved.archived,
+      ...(project === undefined ? {} : { project: { id: project.id, name: project.name } }),
+      folders: folderViews(foldersOf(input.sessionId, catalog), catalog.folders),
+    };
+    return buildHistory({ transcript, session, input });
+  }
+
+  summariesFromIndex() {
+    const { read } = this.readHandle();
+    return read.prepare("SELECT session_id, path, mtime_ms, cwd, name, created, archived FROM sync_state").all()
+      .map((row) => ({
+        id: row.session_id,
+        path: row.path,
+        cwd: row.cwd ?? undefined,
+        name: row.name ?? undefined,
+        created: row.created ?? undefined,
+        mtimeMs: Number(row.mtime_ms),
+        archived: row.archived === 1,
+      }));
+  }
+
+  /** A session's file, from the index when it knows it, otherwise by filename. */
+  async resolveSession(sessionId) {
+    if (this.completeSinceRestart && !this.permanentlyUnusable) {
+      try {
+        const { read } = this.readHandle();
+        const row = read.prepare("SELECT path, archived FROM sync_state WHERE session_id = ?").get(sessionId);
+        if (row?.path !== undefined) return { path: row.path, archived: row.archived === 1 };
+      } catch (error) {
+        this.fail(error);
+      }
+    }
+    // Session files are `<timestamp>_<id>.jsonl`; a bare `<id>.jsonl` is accepted
+    // too, because the header still has to agree before the file is used.
+    const candidates = await listCandidates(this.corpus, { includeArchived: true });
+    const names = [`_${sessionId}.jsonl`, `${sessionId}.jsonl`];
+    for (const candidate of candidates) {
+      if (!names.some((name) => candidate.path.endsWith(name))) continue;
+      if (await readHeaderId(candidate.path) === sessionId) {
+        return { path: candidate.path, archived: candidate.archived };
+      }
+    }
+    // A renamed file can still be the session; the header is the authority.
+    for (const candidate of candidates) {
+      if (await readHeaderId(candidate.path) === sessionId) {
+        return { path: candidate.path, archived: candidate.archived };
+      }
+    }
+    return undefined;
   }
 
   async indexStatus() {
@@ -439,7 +526,7 @@ export class SearchIndex {
       await this.insertRows(write, row.session_id, rows);
       write.prepare(`${UPSERT_SYNC}`).run(
         row.session_id, candidate.path, candidate.size, candidate.mtimeMs, increment.endByte,
-        leafId, row.cwd, name, candidate.archived ? 1 : 0, this.now(),
+        leafId, row.created, row.cwd, name, candidate.archived ? 1 : 0, this.now(),
       );
       write.exec("COMMIT");
     } catch (error) {
@@ -478,7 +565,7 @@ export class SearchIndex {
       await this.insertRows(write, id, rows);
       write.prepare(UPSERT_SYNC).run(
         id, candidate.path, candidate.size, candidate.mtimeMs, file.endByte,
-        file.entries.at(-1)?.id ?? null, file.header?.cwd ?? null,
+        file.entries.at(-1)?.id ?? null, file.header?.timestamp ?? null, file.header?.cwd ?? null,
         normalizeName(file.name), candidate.archived ? 1 : 0, this.now(),
       );
       write.exec("COMMIT");
@@ -597,6 +684,18 @@ function normalizeName(name) {
 function count(handle, sql) {
   const row = handle.prepare(sql).get();
   return Number(row?.n ?? 0);
+}
+
+async function readHeaderId(filePath) {
+  for await (const line of readLines(filePath)) {
+    try {
+      const parsed = JSON.parse(line.text);
+      return parsed !== null && typeof parsed === "object" && parsed.type === "session" && typeof parsed.id === "string" ? parsed.id : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
 }
 
 function messageOf(error) {

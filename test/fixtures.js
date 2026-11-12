@@ -43,8 +43,8 @@ export function compaction(id, parentId, summary, timestamp = T0) {
   return { type: "compaction", id, parentId, timestamp, summary, firstKeptEntryId: id, tokensBefore: 1 };
 }
 
-export function customMessage(id, parentId, content, timestamp = T0, { display = true, customType = "test" } = {}) {
-  return { type: "custom_message", id, parentId, timestamp, customType, content, display };
+export function customMessage(id, parentId, content, timestamp = T0, { display = true, customType = "test", details } = {}) {
+  return { type: "custom_message", id, parentId, timestamp, customType, content, display, ...(details === undefined ? {} : { details }) };
 }
 
 export function askResult(id, parentId, details, { content = "Tool finished.", isError = false, timestamp = T0 } = {}) {

@@ -4,13 +4,23 @@ import { SearchIndex } from "./search/index-store.js";
 import { createSettingsStore } from "./search/settings.js";
 import {
   CONFIG_OPERATION,
+  HISTORY_OPERATION,
   INDEX_STATUS_OPERATION,
+  LIST_OPERATION,
   REBUILD_INDEX_OPERATION,
   SEARCH_OPERATION,
   SET_CONFIG_OPERATION,
 } from "./browser/operations.js";
 
-export { CONFIG_OPERATION, INDEX_STATUS_OPERATION, REBUILD_INDEX_OPERATION, SEARCH_OPERATION, SET_CONFIG_OPERATION };
+export {
+  CONFIG_OPERATION,
+  HISTORY_OPERATION,
+  INDEX_STATUS_OPERATION,
+  LIST_OPERATION,
+  REBUILD_INDEX_OPERATION,
+  SEARCH_OPERATION,
+  SET_CONFIG_OPERATION,
+};
 
 const plugin = {
   apiVersion: 5,
@@ -40,6 +50,8 @@ const plugin = {
       peer: {
         async request(request) {
           if (request.operation === SEARCH_OPERATION) return prune(await index.search(request.input, request.signal));
+          if (request.operation === LIST_OPERATION) return prune(await index.listSessions(request.input));
+          if (request.operation === HISTORY_OPERATION) return prune(await index.readHistory(request.input));
           if (request.operation === REBUILD_INDEX_OPERATION) return prune(await index.rebuild());
           if (request.operation === INDEX_STATUS_OPERATION) return prune(await index.indexStatus());
           if (request.operation === CONFIG_OPERATION) return prune(await settings.read());

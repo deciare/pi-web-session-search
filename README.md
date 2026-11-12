@@ -24,6 +24,16 @@ The footer says how the results were produced and how long they took. While the 
 
 **Time:** in the footer chooses how a session's time is shown. The default is relative — "22 hours ago". Typing a pattern shows an absolute time instead; `%Y-%m-%d %H:%M:%S` gives `2026-11-12 00:49:05`. The dialog lists the tokens. The choice is stored on the machine rather than in the browser, so setting it once holds for every browser, including a phone; another browser picks it up when the page reloads. Hovering a result always shows the exact time, whatever the setting.
 
+## Agent tools (optional)
+
+The same package can give the assistant read access to its own history. The tools are inert unless you add this package to the agent's Pi packages; with the panel alone, nothing changes.
+
+- **`sessions_search`** — search conversation text and get back matching messages with the entry id needed to read more.
+- **`sessions_list`** — list conversations, filtered by name, project, folder, last activity or archive state.
+- **`sessions_history`** — read one conversation: its last turns, a time range, or around a particular message, optionally including thinking, tool calls and tool output.
+
+They read through the same index the panel uses, only work inside a PI WEB-hosted session, and are read-only: nothing is archived, moved or sent.
+
 ## Where it keeps things
 
 Two files in this plugin's own data directory, `$PI_WEB_DATA_DIR/plugin-data/session-search/`:

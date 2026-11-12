@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Full-text search across every PI WEB session transcript on one machine",
+  "pi": {
+    "extensions": ["./extensions/index.js"]
+  },
   "piWeb": {
     "plugins": [
       {

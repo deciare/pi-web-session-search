@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { randomBytes } from "node:crypto";
 import { appendFile } from "node:fs/promises";
-import { rename, rm, stat, truncate, utimes, writeFile } from "node:fs/promises";
+import { mkdir, rename, rm, stat, truncate, utimes, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { SearchIndex } from "../search/index-store.js";
 import {
@@ -422,5 +422,109 @@ test("the index is larger than nothing and smaller than the transcripts", async 
   await index.runPass();
   const info = await stat(index.dbPath);
   assert.ok(info.size > 0);
+  index.dispose();
+});
+
+test("list answers from the files before the first pass and from the index after it", async (t) => {
+  const corpus = await basicCorpus();
+  t.after(() => cleanup(corpus));
+  const { index } = makeIndex(corpus);
+
+  const cold = await index.listSessions({});
+  assert.equal(cold.sessions[0].id, "s1");
+  assert.equal(cold.sessions[0].created, "2026-01-01T00:00:00.000Z");
+  assert.equal(cold.total, 1);
+
+  await index.runPass();
+  const warm = await index.listSessions({});
+  assert.deepEqual(warm.sessions.map((session) => session.id), ["s1"]);
+  assert.equal(warm.sessions[0].created, "2026-01-01T00:00:00.000Z");
+  index.dispose();
+});
+
+test("list carries project and folder metadata, and tolerates their absence", async (t) => {
+  const corpus = await basicCorpus();
+  t.after(() => cleanup(corpus));
+  await mkdir(corpus.dataDir, { recursive: true });
+  await writeFile(`${corpus.dataDir}/projects.json`, JSON.stringify({
+    projects: [{ id: "p1", name: "Workspace", path: "/workspace" }],
+  }), "utf8");
+  await writeFile(`${corpus.dataDir}/session-folders.json`, JSON.stringify({
+    folders: [{ id: "f1", parentId: null, name: "Work" }],
+    placements: { s1: ["f1"] },
+  }), "utf8");
+  const { index } = makeIndex(corpus);
+  await index.runPass();
+
+  const listed = await index.listSessions({});
+  assert.deepEqual(listed.sessions[0].project, { id: "p1", name: "Workspace" });
+  assert.deepEqual(listed.sessions[0].folders, [{ id: "f1", name: "Work" }]);
+  assert.equal((await index.listSessions({ projectId: "p1" })).total, 1);
+  assert.equal((await index.listSessions({ folderId: "f1" })).total, 1);
+  assert.equal((await index.listSessions({ folderId: "other" })).total, 0);
+  index.dispose();
+});
+
+test("an archived session is listed only when asked for", async (t) => {
+  const corpus = await basicCorpus();
+  t.after(() => cleanup(corpus));
+  await writeSession(corpus, "b.jsonl", [sessionHeader("s2", "/workspace"), textMessage("n1", null, "user", "archived")], { archived: true });
+  const { index } = makeIndex(corpus);
+  await index.runPass();
+  assert.deepEqual((await index.listSessions({})).sessions.map((session) => session.id), ["s1"]);
+  assert.deepEqual((await index.listSessions({ includeArchived: true })).sessions.map((session) => session.id).sort(), ["s1", "s2"]);
+  index.dispose();
+});
+
+test("history reads the last turn by default and the anchored turn on request", async (t) => {
+  const corpus = await makeCorpus();
+  t.after(() => cleanup(corpus));
+  await writeSession(corpus, "a.jsonl", [
+    sessionHeader("s1", "/workspace"),
+    textMessage("m1", null, "user", "first question"),
+    contentMessage("m2", "m1", "assistant", [{ type: "text", text: "first answer" }]),
+    textMessage("m3", "m2", "user", "second question"),
+    contentMessage("m4", "m3", "assistant", [{ type: "text", text: "visible" }, { type: "thinking", thinking: "secret" }]),
+  ]);
+  const { index } = makeIndex(corpus);
+  await index.runPass();
+
+  const last = await index.readHistory({ sessionId: "s1" });
+  assert.deepEqual(last.entries.map((entry) => entry.text), ["second question", "visible"]);
+  assert.equal(last.session.id, "s1");
+  assert.equal(last.session.cwd, "/workspace");
+
+  const anchored = await index.readHistory({ sessionId: "s1", entryId: "m2", contextTurnsBefore: 0, contextTurnsAfter: 0 });
+  assert.deepEqual(anchored.entries.map((entry) => entry.text), ["first question", "first answer"]);
+
+  const everything = await index.readHistory({ sessionId: "s1", lastTurns: 1, everything: true });
+  assert.deepEqual(everything.entries.map((entry) => entry.kind), ["text", "text", "thinking"]);
+  index.dispose();
+});
+
+test("history finds a session by filename when the index does not know it", async (t) => {
+  const corpus = await makeCorpus();
+  t.after(() => cleanup(corpus));
+  await writeSession(corpus, "a.jsonl", [sessionHeader("s1"), textMessage("m1", null, "user", "only message")]);
+  const { index } = makeIndex(corpus);
+  // No pass: the index is empty, so the resolver falls back to the filename.
+  const history = await index.readHistory({ sessionId: "s1" });
+  assert.deepEqual(history.entries.map((entry) => entry.text), ["only message"]);
+  index.dispose();
+});
+
+test("history errors name the missing session and the off-branch entry", async (t) => {
+  const corpus = await makeCorpus();
+  t.after(() => cleanup(corpus));
+  await writeSession(corpus, "a.jsonl", [
+    sessionHeader("s1"),
+    textMessage("m1", null, "user", "kept"),
+    textMessage("m2", "m1", "assistant", "abandoned"),
+    textMessage("m3", "m1", "user", "leaf"),
+  ]);
+  const { index } = makeIndex(corpus);
+  await index.runPass();
+  await assert.rejects(() => index.readHistory({ sessionId: "missing" }), /not found on this machine/u);
+  await assert.rejects(() => index.readHistory({ sessionId: "s1", entryId: "m2" }), /not on this session's active branch/u);
   index.dispose();
 });
