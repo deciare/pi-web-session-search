@@ -143,11 +143,12 @@ assert(destination?.projectId === "p1" && destination?.workspaceId === "w1", "th
 // ---- timestamp format ------------------------------------------------------
 
 const formatButton = element.shadowRoot.querySelector(".time-format");
-assert(formatButton?.textContent === "Time: relative", `the footer names the default (${formatButton?.textContent})`);
+assert(formatButton?.textContent === "Time format", `the footer labels the control (${formatButton?.textContent})`);
 formatButton.click();
 const dialog = element.shadowRoot.querySelector(".time-dialog");
 assert(dialog !== null && (dialog.hasAttribute("open") || dialog.open === true), "the format dialog opened");
 const formatInput = dialog.querySelector("input.format");
+assert(formatInput.value === "relative", `the dialog is prefilled with the current format (${formatInput.value})`);
 formatInput.value = "%Y-%m-%d %H:%M:%S";
 dialog.querySelector(".actions .primary").click();
 await new Promise((resolve) => setTimeout(resolve, 20));
@@ -157,7 +158,8 @@ assert(dialog.hasAttribute("open") === false, "the dialog closed on save");
 const sessionMeta = element.shadowRoot.querySelector(".session-meta")?.textContent ?? "";
 assert(/2026-11-\d\d/.test(sessionMeta), `the session header shows an absolute time (${sessionMeta})`);
 assert(!sessionMeta.includes("ago"), "the relative phrase is gone");
-assert(formatButton.textContent === "Time: %Y-%m-%d %H:%M:%S", `the footer names the pattern (${formatButton.textContent})`);
+assert(formatButton.textContent === "Time format", "the footer label does not change with the format");
+assert(formatButton.title === "%Y-%m-%d %H:%M:%S", `the tooltip carries the format (${formatButton.title})`);
 assert(requests.some((request) => request.operation === CONFIG_OPERATION), "the panel read the shared configuration");
 assert(requests.find((request) => request.operation === SEARCH_OPERATION)?.input.includeArchived === true, "archived sessions are included by default");
 
@@ -165,6 +167,7 @@ assert(requests.find((request) => request.operation === SEARCH_OPERATION)?.input
 
 const archivedBox = element.shadowRoot.querySelector(".archived input");
 assert(archivedBox?.checked === true, "the archived checkbox reflects the setting");
+assert(element.shadowRoot.querySelector(".archived span")?.textContent === "Include archived", "the checkbox says what it does");
 archivedBox.checked = false;
 archivedBox.dispatchEvent(new window.Event("change"));
 await new Promise((resolve) => setTimeout(resolve, 30));

@@ -14,15 +14,15 @@ It does not search anything the transcript keeps out of sight: reasoning and thi
 
 Matching is on text, not words: `roll` finds `rollback`, and `resolvePlug` finds `resolvePluginNavigation`. Case is ignored.
 
-Archived sessions are included when the **Archived** checkbox is ticked, and labelled **archived**.
+Archived sessions are included when the **Include archived** checkbox is ticked, and labelled **archived**.
 
 ## Using the panel
 
 Type; results appear after a short pause and are grouped by session, with the matching text highlighted and the role of each hit on the left (**you**, **assistant**, **question**, **note**). **Load more** at the bottom of the list fetches the next page. Clicking a hit opens its conversation.
 
-The footer says how the results were produced and how long they took, and carries an **Archived** checkbox: ticked, archived conversations are searched like any other; cleared, they are left out. While the index is being built for the first time, the panel says **Indexing 12/40** and answers from the transcripts instead — slower, and just as complete. **Rebuild index** throws the index away and starts again; it is a normal button, not a repair procedure.
+The footer says how the results were produced and how long they took, and carries an **Include archived** checkbox: ticked, archived conversations are searched like any other; cleared, they are left out. While the index is being built for the first time, the panel says **Indexing 12/40** and answers from the transcripts instead — slower, and just as complete. **Rebuild index** throws the index away and starts again; it is a normal button, not a repair procedure.
 
-**Time:** in the footer chooses how a session's time is shown. The default is relative — "22 hours ago". Typing a pattern shows an absolute time instead; `%Y-%m-%d %H:%M:%S` gives `2026-11-12 00:49:05`. The dialog lists the tokens. The choice is stored on the machine rather than in the browser, so setting it once holds for every browser, including a phone; another browser picks it up when the page reloads. Hovering a result always shows the exact time, whatever the setting.
+**Time format** in the footer chooses how a session's time is shown. The default is relative — "22 hours ago". Typing a pattern shows an absolute time instead; `%Y-%m-%d %H:%M:%S` gives `2026-11-12 00:49:05`. The dialog lists the tokens. The choice is stored on the machine rather than in the browser, so setting it once holds for every browser, including a phone; another browser picks it up when the page reloads. Hovering a result always shows the exact time, whatever the setting.
 
 ## Agent tools (optional)
 
@@ -39,7 +39,7 @@ They read through the same index the panel uses, only work inside a PI WEB-hoste
 Two files in this plugin's own data directory, `$PI_WEB_DATA_DIR/plugin-data/session-search/`:
 
 - `index.sqlite3` — a cache of the transcripts. It is safe to delete at any time.
-- `settings.json` — `{"timeFormat": "relative", "includeArchived": true}`, where the format is either `relative` or a pattern such as `%Y-%m-%d %H:%M:%S`. The **Time:** dialog and the **Archived** checkbox write it, and it is safe to edit by hand: a hand edit applies on the next page reload, with no daemon restart. Missing values mean relative time and included archived sessions.
+- `settings.json` — `{"timeFormat": "relative", "includeArchived": true}`, where the format is either `relative` or a pattern such as `%Y-%m-%d %H:%M:%S`. The **Time format** dialog and the **Include archived** checkbox write it, and it is safe to edit by hand: a hand edit applies on the next page reload, with no daemon restart. Missing values mean relative time and included archived sessions.
 
 Neither file lives inside the installed plugin directory, so upgrading the plugin leaves both alone.
 

@@ -475,8 +475,9 @@ class SessionSearchPanel extends HTMLElement {
     this.#archivedBox.checked = this.#includeArchived;
     this.#archivedLabel.textContent = this.#text("archivedFilter");
     this.#archivedBox.title = this.#text("archivedFilterTitle");
-    this.#formatButton.textContent = this.#text("timeFormatValue", { format: this.#timeFormat });
-    this.#formatButton.title = this.#text("timeFormatTitle");
+    this.#formatButton.textContent = this.#text("timeFormatButton");
+    // The format itself is in the tooltip and prepopulated in the dialog.
+    this.#formatButton.title = this.#timeFormat;
     this.#formatHeading.textContent = this.#text("timeFormatTitle");
     this.#formatLabel.textContent = this.#text("timeFormatLabel");
     this.#formatHint.textContent = this.#text("timeFormatHint");
