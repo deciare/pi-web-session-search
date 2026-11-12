@@ -168,7 +168,7 @@ test("an archived session is marked, and the live copy wins a transient duplicat
   assert.equal(excluded.sessions.length, 0);
 });
 
-test("per-session cap and the time budget are visible, not silent", async (t) => {
+test("every matching message is a hit, and the budget is visible when it bites", async (t) => {
   const corpus = await makeCorpus();
   t.after(() => cleanup(corpus));
   const entries = [sessionHeader("s1")];
@@ -180,9 +180,9 @@ test("per-session cap and the time budget are visible, not silent", async (t) =>
   }
   await writeSession(corpus, "a.jsonl", entries);
 
-  const capped = await scanSessions(corpus, query("rollback"));
-  assert.equal(capped.total, 6);
-  assert.equal(capped.sessions[0].hits.length, 3);
+  const full = await scanSessions(corpus, query("rollback"));
+  assert.equal(full.total, 6);
+  assert.equal(full.sessions[0].hits.length, 6);
 
   const truncated = await scanSessions(corpus, query("rollback"), { budgetMs: -1 });
   assert.equal(truncated.truncated, true);

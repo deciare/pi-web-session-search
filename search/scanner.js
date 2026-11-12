@@ -6,7 +6,6 @@ import { matchSnippet } from "./snippets.js";
 
 export const SCAN_BUDGET_MS = 2000;
 export const SCAN_HIT_CAP = 200;
-export const HITS_PER_SESSION = 3;
 
 /** Case-insensitive matching is only safe to prefilter on the raw line when the
  * query is plain ASCII: only then is every case variant of the text ASCII too,
@@ -71,7 +70,7 @@ export async function scanSessions(corpus, input, options = {}) {
       .filter((message) => branch.has(message.id))
       .sort((left, right) => left.start - right.start);
     total += matched.length;
-    const hits = matched.slice(0, HITS_PER_SESSION);
+    const hits = matched;
     if (hits.length === 0) continue;
     scannedHits += hits.length;
     sessions.push({

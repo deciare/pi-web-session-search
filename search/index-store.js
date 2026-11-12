@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { listCandidates } from "./corpus.js";
 import { decodeCursor, encodeCursor, queryFingerprint } from "./cursor.js";
-import { scanSessions, HITS_PER_SESSION } from "./scanner.js";
+import { scanSessions } from "./scanner.js";
 import { activeBranch, readSessionFile } from "./session-file.js";
 import { matchSnippet } from "./snippets.js";
 
@@ -57,14 +57,13 @@ WITH matched AS (
   SELECT h.session_id AS session_id, h.entry_id AS entry_id, h.role AS role, h.ts AS ts,
          h.position AS position, substr(h.text, 1, ${MAX_QUERY_TEXT}) AS text,
          s.mtime_ms AS mtime_ms, s.cwd AS cwd, s.name AS name, s.archived AS archived,
-         ROW_NUMBER() OVER (PARTITION BY h.session_id ORDER BY h.position) AS session_rank,
          COUNT(*) OVER () AS total
   FROM hits h
   JOIN sync_state s ON s.session_id = h.session_id
   WHERE hits MATCH ? AND (? = 1 OR s.archived = 0)
 )
 SELECT * FROM matched
-WHERE session_rank <= ${HITS_PER_SESSION}${cursor ? `
+WHERE 1 = 1${cursor ? `
   AND (mtime_ms < ? OR (mtime_ms = ? AND (session_id > ? OR (session_id = ? AND position > ?))))` : ""}
 ORDER BY mtime_ms DESC, session_id ASC, position ASC
 LIMIT ?`;
