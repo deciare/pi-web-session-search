@@ -1,4 +1,7 @@
+import { DEFAULT_ABSOLUTE_PATTERN, RELATIVE, formatTimestamp, normalizeTimeFormat } from "./timeFormat.js";
+
 export const PANEL_TAG = "session-search-panel";
+const TIME_FORMAT_STORAGE_KEY = "pi-web:session-search:time-format";
 const SEARCH_OPERATION = "search";
 const REBUILD_OPERATION = "rebuildIndex";
 const DEBOUNCE_MS = 200;
@@ -21,6 +24,15 @@ class SessionSearchPanel extends HTMLElement {
   #status;
   #meta;
   #rebuildButton;
+  #formatButton;
+  #formatDialog;
+  #formatInput;
+  #formatHeading;
+  #formatLabel;
+  #formatHint;
+  #formatCancel;
+  #formatSave;
+  #timeFormat = RELATIVE;
   #results;
   #response;
   #error;
@@ -66,6 +78,8 @@ class SessionSearchPanel extends HTMLElement {
   }
 
   connectedCallback() {
+    this.#timeFormat = readStoredTimeFormat();
+    this.#renderStatus();
     if (!this.#query && rememberedQueries.has(this.#machineId ?? "local")) {
       this.#query = rememberedQueries.get(this.#machineId ?? "local");
       this.#input.value = this.#query;
@@ -160,6 +174,31 @@ class SessionSearchPanel extends HTMLElement {
       this.#error = this.#text("failed", { message: messageOf(error) });
       this.#renderStatus();
     }
+  }
+
+  #openTimeFormat() {
+    const dialog = this.#formatDialog;
+    if (dialog === undefined) return;
+    this.#formatInput.value = this.#timeFormat;
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+    this.#formatInput.focus();
+    this.#formatInput.select();
+  }
+
+  #closeTimeFormat() {
+    const dialog = this.#formatDialog;
+    if (dialog === undefined) return;
+    if (typeof dialog.close === "function") dialog.close();
+    else dialog.removeAttribute("open");
+  }
+
+  #setTimeFormat(value) {
+    const next = normalizeTimeFormat(value);
+    this.#timeFormat = next;
+    writeStoredTimeFormat(next);
+    this.#renderStatus();
+    this.#renderResults();
   }
 
   #scheduleRebuildPoll() {
@@ -282,15 +321,65 @@ class SessionSearchPanel extends HTMLElement {
     const meta = document.createElement("span");
     meta.className = "meta";
     this.#meta = meta;
+    const format = document.createElement("button");
+    format.type = "button";
+    format.className = "time-format";
+    format.addEventListener("click", () => this.#openTimeFormat());
+    this.#formatButton = format;
     const rebuild = document.createElement("button");
     rebuild.type = "button";
     rebuild.className = "rebuild";
     rebuild.addEventListener("click", () => void this.#rebuild());
     this.#rebuildButton = rebuild;
-    footer.append(meta, rebuild);
+    footer.append(meta, format, rebuild);
+
+    const dialog = document.createElement("dialog");
+    dialog.className = "time-dialog";
+    const heading = document.createElement("h2");
+    const label = document.createElement("label");
+    const labelText = document.createElement("span");
+    const formatInput = document.createElement("input");
+    formatInput.type = "text";
+    formatInput.className = "format";
+    formatInput.autocomplete = "off";
+    formatInput.spellcheck = false;
+    label.append(labelText, formatInput);
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    const save = document.createElement("button");
+    save.type = "button";
+    save.className = "primary";
+    actions.append(cancel, save);
+    dialog.append(heading, label, hint, actions);
+    cancel.addEventListener("click", () => this.#closeTimeFormat());
+    save.addEventListener("click", () => {
+      this.#setTimeFormat(formatInput.value);
+      this.#closeTimeFormat();
+    });
+    formatInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      this.#setTimeFormat(formatInput.value);
+      this.#closeTimeFormat();
+    });
+    dialog.addEventListener("click", (event) => {
+      // A click on the backdrop targets the dialog element itself.
+      if (event.target === dialog) this.#closeTimeFormat();
+    });
+    this.#formatDialog = dialog;
+    this.#formatInput = formatInput;
+    this.#formatHeading = heading;
+    this.#formatLabel = labelText;
+    this.#formatHint = hint;
+    this.#formatCancel = cancel;
+    this.#formatSave = save;
 
     panel.append(searchRow, status, results, footer);
-    root.append(panel);
+    root.append(panel, dialog);
     this.#renderStatus();
   }
 
@@ -299,6 +388,14 @@ class SessionSearchPanel extends HTMLElement {
     this.#input?.setAttribute("aria-label", this.#text("searchLabel"));
     this.#input?.setAttribute("placeholder", this.#text("placeholder"));
     this.#rebuildButton.textContent = this.#text("rebuild");
+    this.#formatButton.textContent = this.#text("timeFormatValue", { format: this.#timeFormat });
+    this.#formatButton.title = this.#text("timeFormatTitle");
+    this.#formatHeading.textContent = this.#text("timeFormatTitle");
+    this.#formatLabel.textContent = this.#text("timeFormatLabel");
+    this.#formatHint.textContent = this.#text("timeFormatHint");
+    this.#formatInput.setAttribute("placeholder", DEFAULT_ABSOLUTE_PATTERN);
+    this.#formatCancel.textContent = this.#text("cancel");
+    this.#formatSave.textContent = this.#text("save");
     const parts = [];
     if (this.#loading) parts.push(this.#text("searching"));
     if (this.#error !== undefined) parts.push(this.#error);
@@ -371,8 +468,8 @@ class SessionSearchPanel extends HTMLElement {
     }
     const meta = document.createElement("span");
     meta.className = "session-meta";
-    meta.textContent = [hit.session?.cwd, formatRelative(this.#localization, hit.session?.modified)].filter(Boolean).join(" · ");
-    meta.title = hit.session?.modified ?? "";
+    meta.textContent = [hit.session?.cwd, this.#formatTime(hit.session?.modified)].filter(Boolean).join(" · ");
+    meta.title = formatTimestamp(hit.session?.modified, DEFAULT_ABSOLUTE_PATTERN, this.#localization);
     header.append(meta);
     return header;
   }
@@ -382,7 +479,7 @@ class SessionSearchPanel extends HTMLElement {
     row.type = "button";
     row.className = "hit";
     row.setAttribute("data-hit", String(index));
-    row.title = hit.session?.modified ?? "";
+    row.title = formatTimestamp(hit.session?.modified, DEFAULT_ABSOLUTE_PATTERN, this.#localization);
     const role = document.createElement("span");
     role.className = `role ${hit.role === "user" ? "user" : hit.role === "assistant" ? "assistant" : "other"}`;
     role.textContent = this.#roleLabel(hit.role);
@@ -391,6 +488,10 @@ class SessionSearchPanel extends HTMLElement {
     appendHighlighted(text, hit.snippet ?? "", this.#query.trim());
     row.append(role, text);
     return row;
+  }
+
+  #formatTime(iso) {
+    return formatTimestamp(iso, this.#timeFormat, this.#localization);
   }
 
   #roleLabel(role) {
@@ -434,29 +535,19 @@ function bestPathMatch(items, path) {
   return best;
 }
 
-function formatRelative(localization, iso) {
-  if (typeof iso !== "string" || iso === "") return "";
-  const date = new Date(iso);
-  if (!Number.isFinite(date.getTime())) return "";
-  if (localization === undefined) return date.toLocaleString();
-  const seconds = Math.round((date.getTime() - Date.now()) / 1000);
-  const magnitude = Math.abs(seconds);
-  const [value, unit] = magnitude < 60 ? [seconds, "second"]
-    : magnitude < 3600 ? [Math.round(seconds / 60), "minute"]
-      : magnitude < 86_400 ? [Math.round(seconds / 3600), "hour"]
-        : magnitude < 2_592_000 ? [Math.round(seconds / 86_400), "day"]
-          : [undefined, undefined];
-  if (value !== undefined && unit !== undefined) {
-    try {
-      return localization.relativeTime(value, unit);
-    } catch {
-      return date.toLocaleString();
-    }
-  }
+function readStoredTimeFormat() {
   try {
-    return localization.date(date, { dateStyle: "medium" });
+    return normalizeTimeFormat(localStorage.getItem(TIME_FORMAT_STORAGE_KEY) ?? RELATIVE);
   } catch {
-    return date.toLocaleDateString();
+    return RELATIVE;
+  }
+}
+
+function writeStoredTimeFormat(value) {
+  try {
+    localStorage.setItem(TIME_FORMAT_STORAGE_KEY, value);
+  } catch {
+    // A preference that cannot be stored still applies to this page.
   }
 }
 
@@ -494,7 +585,24 @@ function styleSheet() {
     .footer { display: flex; align-items: center; justify-content: space-between; gap: 8px;
       padding: 6px 10px; border-top: 1px solid var(--pi-border, color-mix(in srgb, currentColor 20%, transparent)); }
     .meta { font-size: 0.8em; color: var(--pi-muted, inherit); }
-    .rebuild, .load-more { font: inherit; color: inherit; cursor: pointer; border-radius: 6px;
+    .time-format { max-width: 15em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .time-dialog { border: 1px solid var(--pi-border, color-mix(in srgb, currentColor 25%, transparent)); border-radius: 10px;
+      background: var(--pi-bg, Canvas); color: var(--pi-text, CanvasText); padding: 16px; max-width: 26em;
+      font: inherit; box-shadow: 0 12px 40px var(--pi-shadow, #0008); }
+    .time-dialog::backdrop { background: var(--pi-overlay, #0008); }
+    .time-dialog h2 { margin: 0 0 12px; font-size: 1.05em; }
+    .time-dialog label { display: flex; flex-direction: column; gap: 6px; font-size: 0.9em; color: var(--pi-text-secondary, inherit); }
+    .time-dialog input.format { font: inherit; padding: 6px 8px; border-radius: 6px;
+      border: 1px solid var(--pi-border, color-mix(in srgb, currentColor 25%, transparent));
+      background: var(--pi-surface, transparent); color: inherit; }
+    .time-dialog input.format:focus-visible { outline: 2px solid var(--pi-accent, currentColor); outline-offset: 1px; }
+    .time-dialog .hint { margin: 10px 0 14px; font-size: 0.8em; line-height: 1.4; color: var(--pi-muted, inherit); }
+    .time-dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
+    .time-dialog .actions button { font: inherit; color: inherit; cursor: pointer; border-radius: 6px;
+      border: 1px solid var(--pi-border, color-mix(in srgb, currentColor 25%, transparent));
+      background: var(--pi-surface, transparent); padding: 5px 12px; }
+    .time-dialog .actions .primary { border-color: var(--pi-accent, currentColor); background: var(--pi-accent, transparent); color: var(--pi-bg, CanvasText); }
+    .rebuild, .load-more, .time-format { font: inherit; color: inherit; cursor: pointer; border-radius: 6px;
       border: 1px solid var(--pi-border, color-mix(in srgb, currentColor 25%, transparent));
       background: var(--pi-surface, transparent); padding: 4px 10px; }
     .load-more { display: block; margin: 8px auto; }

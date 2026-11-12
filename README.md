@@ -22,6 +22,8 @@ Type; results appear after a short pause and are grouped by session, with the ma
 
 The footer says how the results were produced and how long they took. While the index is being built for the first time, the panel says **Indexing 12/40** and answers from the transcripts instead — slower, and just as complete. **Rebuild index** throws the index away and starts again; it is a normal button, not a repair procedure.
 
+**Time:** in the footer chooses how a session's time is shown. The default is relative — "22 hours ago". Typing a pattern shows an absolute time instead; `%Y-%m-%d %H:%M:%S` gives `2026-11-12 00:49:05`. The dialog lists the tokens, and the choice is remembered in this browser. Hovering a result always shows the exact time, whatever the setting.
+
 ## Where it keeps things
 
 One file: `index.sqlite3` in this plugin's own data directory, `$PI_WEB_DATA_DIR/plugin-data/session-search/`. It is a cache of the transcripts, and it is safe to delete at any time.

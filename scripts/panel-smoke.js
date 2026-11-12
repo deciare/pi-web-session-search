@@ -122,6 +122,25 @@ assert(destination?.sessionId === "s1" && destination?.messageEntryId === "e9", 
 assert(destination?.view === "chat", "a hit opens the conversation");
 assert(destination?.projectId === "p1" && destination?.workspaceId === "w1", "the cwd is resolved to a workspace");
 
+// ---- timestamp format ------------------------------------------------------
+
+const formatButton = element.shadowRoot.querySelector(".time-format");
+assert(formatButton?.textContent === "Time: relative", `the footer names the default (${formatButton?.textContent})`);
+formatButton.click();
+const dialog = element.shadowRoot.querySelector(".time-dialog");
+assert(dialog !== null && (dialog.hasAttribute("open") || dialog.open === true), "the format dialog opened");
+const formatInput = dialog.querySelector("input.format");
+formatInput.value = "%Y-%m-%d %H:%M:%S";
+dialog.querySelector(".actions .primary").click();
+assert(dialog.hasAttribute("open") === false, "the dialog closed on save");
+
+const sessionMeta = element.shadowRoot.querySelector(".session-meta")?.textContent ?? "";
+assert(/2026-11-\d\d/.test(sessionMeta), `the session header shows an absolute time (${sessionMeta})`);
+assert(!sessionMeta.includes("ago"), "the relative phrase is gone");
+assert(formatButton.textContent === "Time: %Y-%m-%d %H:%M:%S", `the footer names the pattern (${formatButton.textContent})`);
+assert(window.localStorage.getItem("pi-web:session-search:time-format") === "%Y-%m-%d %H:%M:%S", "the choice is stored");
+assert((element.shadowRoot.querySelector("[data-hit]")?.title ?? "").match(/^\d{4}-\d{2}-\d{2} /) !== null, "the tooltip is always absolute");
+
 console.log("panel smoke: ok");
 
 function assert(condition, message) {
