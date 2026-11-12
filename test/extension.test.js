@@ -38,7 +38,7 @@ test("the extension registers the three session tools once", () => {
   sessionToolsExtension(pi);
   assert.deepEqual(tools.map((tool) => tool.name), ["sessions_search", "sessions_list", "sessions_history"]);
   for (const tool of tools) {
-    assert.equal(tool.exposure, "deferred");
+    assert.equal(tool.exposure, "direct");
     assert.equal(tool.namespace.name, "sessions");
     assert.equal(tool.annotations.readOnlyHint, true);
     assert.equal(typeof tool.parameters, "object");

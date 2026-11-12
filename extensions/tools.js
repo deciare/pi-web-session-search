@@ -74,7 +74,9 @@ const historyParameters = {
  */
 export function createSessionTools({ resolveBackend }) {
   const tool = ({ operation, ...definition }) => ({
-    exposure: "deferred",
+    // Direct, not deferred: three small schemas are worth declaring, and a host
+    // without tool_search would never surface a deferred tool at all.
+    exposure: "direct",
     namespace: NAMESPACE,
     annotations: { readOnlyHint: true, openWorldHint: false, idempotentHint: true },
     ...definition,
