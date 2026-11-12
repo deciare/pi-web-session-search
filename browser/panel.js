@@ -28,6 +28,9 @@ class SessionSearchPanel extends HTMLElement {
   #meta;
   #rebuildButton;
   #formatButton;
+  #archivedBox;
+  #archivedLabel;
+  #includeArchived = true;
   #formatDialog;
   #formatInput;
   #formatHeading;
@@ -135,7 +138,7 @@ class SessionSearchPanel extends HTMLElement {
       const response = await backend.request(SEARCH_OPERATION, {
         query,
         limit: 50,
-        includeArchived: true,
+        includeArchived: this.#includeArchived,
       }, { signal: controller.signal });
       if (seq !== this.#seq) return;
       this.#response = response;
@@ -165,7 +168,7 @@ class SessionSearchPanel extends HTMLElement {
       const response = await backend.request(SEARCH_OPERATION, {
         query: this.#query.trim(),
         limit: 50,
-        includeArchived: true,
+        includeArchived: this.#includeArchived,
         cursor: this.#cursor,
       });
       if (seq !== this.#seq) return;
@@ -191,6 +194,7 @@ class SessionSearchPanel extends HTMLElement {
     try {
       const config = await backend.request(CONFIG_OPERATION, {});
       this.#timeFormat = normalizeTimeFormat(config?.timeFormat);
+      this.#includeArchived = typeof config?.includeArchived === "boolean" ? config.includeArchived : true;
       this.#renderStatus();
       this.#renderResults();
     } catch {
@@ -223,18 +227,14 @@ class SessionSearchPanel extends HTMLElement {
   }
 
   async #saveTimeFormat(value) {
-    const backend = this.#backend();
-    const next = normalizeTimeFormat(value);
-    if (backend === undefined) {
+    if (this.#backend() === undefined) {
       this.#formatError.textContent = this.#text("unavailable");
       return;
     }
     this.#formatSave.disabled = true;
     try {
-      const saved = await backend.request(SET_CONFIG_OPERATION, { timeFormat: next });
-      this.#timeFormat = normalizeTimeFormat(saved?.timeFormat ?? next);
+      await this.#saveConfig({ timeFormat: normalizeTimeFormat(value) });
       this.#formatError.textContent = "";
-      this.#renderStatus();
       this.#renderResults();
       this.#closeTimeFormat();
     } catch (error) {
@@ -242,6 +242,31 @@ class SessionSearchPanel extends HTMLElement {
     } finally {
       this.#formatSave.disabled = false;
     }
+  }
+
+  async #saveArchived(checked) {
+    this.#archivedBox.disabled = true;
+    try {
+      await this.#saveConfig({ includeArchived: checked });
+      this.#error = undefined;
+      if (this.#query.trim() === "") this.#renderStatus();
+      else await this.#search();
+    } catch (error) {
+      this.#error = this.#text("failed", { message: messageOf(error) });
+      this.#renderStatus();
+    } finally {
+      this.#archivedBox.disabled = false;
+    }
+  }
+
+  /** Merge a settings patch and adopt what the backend reports back. */
+  async #saveConfig(patch) {
+    const backend = this.#backend();
+    if (backend === undefined) throw new Error(this.#text("unavailable"));
+    const saved = await backend.request(SET_CONFIG_OPERATION, patch);
+    if (saved?.timeFormat !== undefined) this.#timeFormat = normalizeTimeFormat(saved.timeFormat);
+    if (typeof saved?.includeArchived === "boolean") this.#includeArchived = saved.includeArchived;
+    this.#renderStatus();
   }
 
   #scheduleRebuildPoll() {
@@ -371,6 +396,15 @@ class SessionSearchPanel extends HTMLElement {
     const meta = document.createElement("span");
     meta.className = "meta";
     this.#meta = meta;
+    const archived = document.createElement("label");
+    archived.className = "archived";
+    const archivedBox = document.createElement("input");
+    archivedBox.type = "checkbox";
+    archivedBox.addEventListener("change", () => void this.#saveArchived(archivedBox.checked));
+    const archivedLabel = document.createElement("span");
+    archived.append(archivedBox, archivedLabel);
+    this.#archivedBox = archivedBox;
+    this.#archivedLabel = archivedLabel;
     const format = document.createElement("button");
     format.type = "button";
     format.className = "time-format";
@@ -381,7 +415,7 @@ class SessionSearchPanel extends HTMLElement {
     rebuild.className = "rebuild";
     rebuild.addEventListener("click", () => void this.#rebuild());
     this.#rebuildButton = rebuild;
-    footer.append(meta, format, rebuild);
+    footer.append(meta, archived, format, rebuild);
 
     const dialog = document.createElement("dialog");
     dialog.className = "time-dialog";
@@ -438,6 +472,9 @@ class SessionSearchPanel extends HTMLElement {
     this.#input?.setAttribute("aria-label", this.#text("searchLabel"));
     this.#input?.setAttribute("placeholder", this.#text("placeholder"));
     this.#rebuildButton.textContent = this.#text("rebuild");
+    this.#archivedBox.checked = this.#includeArchived;
+    this.#archivedLabel.textContent = this.#text("archivedFilter");
+    this.#archivedBox.title = this.#text("archivedFilterTitle");
     this.#formatButton.textContent = this.#text("timeFormatValue", { format: this.#timeFormat });
     this.#formatButton.title = this.#text("timeFormatTitle");
     this.#formatHeading.textContent = this.#text("timeFormatTitle");

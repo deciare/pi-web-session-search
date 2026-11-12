@@ -16,11 +16,17 @@ import { join } from "node:path";
 
 export const RELATIVE = "relative";
 export const SETTINGS_FILE = "settings.json";
+/** The panel has always searched archived sessions; the toggle makes that visible. */
+export const DEFAULT_INCLUDE_ARCHIVED = true;
 
 /** The same normalisation the panel applies, so a written value round-trips. */
 export function normalizeTimeFormat(value) {
   const text = typeof value === "string" ? value.trim() : "";
   return text === "" ? RELATIVE : text;
+}
+
+export function normalizeIncludeArchived(value) {
+  return typeof value === "boolean" ? value : DEFAULT_INCLUDE_ARCHIVED;
 }
 
 /**
@@ -52,18 +58,29 @@ export function createSettingsStore(options) {
 
     async read() {
       const { settings } = await readRaw();
-      return { timeFormat: normalizeTimeFormat(settings["timeFormat"]) };
+      return normalizeSettings(settings);
     },
 
+    /** Merge a patch; a field the caller did not mention keeps its stored value. */
     async write(input) {
       const { settings } = await readRaw();
-      const next = { ...settings, timeFormat: normalizeTimeFormat(input?.timeFormat) };
+      const next = { ...settings };
+      if (input?.timeFormat !== undefined) next["timeFormat"] = normalizeTimeFormat(input.timeFormat);
+      if (input?.includeArchived !== undefined) next["includeArchived"] = input.includeArchived === true;
+      const normalized = normalizeSettings(next);
       const temporary = `${path}.tmp`;
-      await writeFile(temporary, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+      await writeFile(temporary, `${JSON.stringify({ ...next, ...normalized }, null, 2)}\n`, "utf8");
       await rename(temporary, path);
       cached = undefined;
-      return { timeFormat: next.timeFormat };
+      return normalized;
     },
+  };
+}
+
+function normalizeSettings(settings) {
+  return {
+    timeFormat: normalizeTimeFormat(settings["timeFormat"]),
+    includeArchived: normalizeIncludeArchived(settings["includeArchived"]),
   };
 }
 

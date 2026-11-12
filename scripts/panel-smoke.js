@@ -66,6 +66,7 @@ assert(panel.title === "Search", `panel title is localized (${panel.title})`);
 
 const requests = [];
 let savedFormat;
+let savedArchived;
 const response = (overrides) => ({
   hits: [
     { sessionId: "s1", entryId: "e9", role: "user", snippet: "…rollback plan…", matchStart: 4, matchLength: 8,
@@ -92,8 +93,12 @@ const context = {
         requests.push({ operation, input });
         if (operation === SEARCH_OPERATION) return response();
         if (operation === REBUILD_INDEX_OPERATION) return { started: true };
-        if (operation === CONFIG_OPERATION) return { timeFormat: savedFormat ?? "relative" };
-        if (operation === SET_CONFIG_OPERATION) { savedFormat = input.timeFormat; return { timeFormat: input.timeFormat }; }
+        if (operation === CONFIG_OPERATION) return { timeFormat: savedFormat ?? "relative", includeArchived: savedArchived ?? true };
+        if (operation === SET_CONFIG_OPERATION) {
+          if (input.timeFormat !== undefined) savedFormat = input.timeFormat;
+          if (input.includeArchived !== undefined) savedArchived = input.includeArchived;
+          return { timeFormat: savedFormat ?? "relative", includeArchived: savedArchived ?? true };
+        }
         return {};
       },
     }),
@@ -154,6 +159,18 @@ assert(/2026-11-\d\d/.test(sessionMeta), `the session header shows an absolute t
 assert(!sessionMeta.includes("ago"), "the relative phrase is gone");
 assert(formatButton.textContent === "Time: %Y-%m-%d %H:%M:%S", `the footer names the pattern (${formatButton.textContent})`);
 assert(requests.some((request) => request.operation === CONFIG_OPERATION), "the panel read the shared configuration");
+assert(requests.find((request) => request.operation === SEARCH_OPERATION)?.input.includeArchived === true, "archived sessions are included by default");
+
+// ---- archived filter --------------------------------------------------------
+
+const archivedBox = element.shadowRoot.querySelector(".archived input");
+assert(archivedBox?.checked === true, "the archived checkbox reflects the setting");
+archivedBox.checked = false;
+archivedBox.dispatchEvent(new window.Event("change"));
+await new Promise((resolve) => setTimeout(resolve, 30));
+assert(savedArchived === false, `the checkbox writes through the peer (${String(savedArchived)})`);
+const lastSearch = [...requests].reverse().find((request) => request.operation === SEARCH_OPERATION);
+assert(lastSearch?.input.includeArchived === false, "the next search excludes archived sessions");
 const rowTitle = element.shadowRoot.querySelector("[data-hit]")?.title ?? "";
 const metaTitle = element.shadowRoot.querySelector(".session-meta")?.title ?? "";
 assert(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(rowTitle), `a row's tooltip is a full timestamp (${rowTitle})`);

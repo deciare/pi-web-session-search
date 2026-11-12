@@ -26,6 +26,8 @@ export function createSearchMessages(localization) {
     scannedResults: message("Transcript scan in {ms} ms", "Results were answered by reading transcripts; ms is a duration in milliseconds"),
     truncated: message("Results are incomplete — the scan reached its time budget.", "Scan fallback ran out of time"),
     archived: message("archived", "Badge marking an archived session"),
+    archivedFilter: message("Archived", "Checkbox label for including archived sessions in results"),
+    archivedFilterTitle: message("Include archived sessions in results", "Tooltip for the archived filter"),
     user: message("you", "Role label for a user message hit"),
     assistant: message("assistant", "Role label for an assistant message hit"),
     question: message("question", "Role label for an ask-card hit"),

@@ -57,10 +57,22 @@ const plugin = {
           if (request.operation === CONFIG_OPERATION) return prune(await settings.read());
           if (request.operation === SET_CONFIG_OPERATION) {
             const input = request.input;
-            if (input === null || typeof input !== "object" || typeof input.timeFormat !== "string") {
-              throw new TypeError("set-config input must be an object with a string timeFormat");
+            if (input === null || typeof input !== "object" || Array.isArray(input)) {
+              throw new TypeError("set-config input must be an object");
             }
-            return prune(await settings.write({ timeFormat: input.timeFormat }));
+            const patch = {};
+            if (input["timeFormat"] !== undefined) {
+              if (typeof input["timeFormat"] !== "string") throw new TypeError("set-config.timeFormat must be a string");
+              patch.timeFormat = input["timeFormat"];
+            }
+            if (input["includeArchived"] !== undefined) {
+              if (typeof input["includeArchived"] !== "boolean") throw new TypeError("set-config.includeArchived must be a boolean");
+              patch.includeArchived = input["includeArchived"];
+            }
+            if (patch.timeFormat === undefined && patch.includeArchived === undefined) {
+              throw new TypeError("set-config needs timeFormat or includeArchived");
+            }
+            return prune(await settings.write(patch));
           }
           throw new Error(`Unsupported session search operation: ${request.operation}`);
         },
