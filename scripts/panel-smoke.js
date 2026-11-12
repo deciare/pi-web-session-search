@@ -33,6 +33,7 @@ globalThis.Document = window.Document;
 
 const { html, render } = await load("node_modules/lit/index.js");
 const { default: plugin } = await import(new URL("../browser/pi-web-plugin.js", import.meta.url).href);
+const { CONFIG_OPERATION, OPERATION_NAME, REBUILD_INDEX_OPERATION, SEARCH_OPERATION, SET_CONFIG_OPERATION } = await import(new URL("../browser/operations.js", import.meta.url).href);
 
 const localization = {
   message: (text, description) => ({ message: text, description }),
@@ -83,11 +84,16 @@ const context = {
     machineId: "local",
     forScope: () => ({
       request: async (operation, input) => {
+        // The host rejects an operation name before the plugin sees it; mirror
+        // that here so a capitalised name fails this smoke test too.
+        if (operation.length > 128 || !OPERATION_NAME.test(operation)) {
+          throw new Error(`Plugin backend operation must match ${String(OPERATION_NAME)}: ${operation}`);
+        }
         requests.push({ operation, input });
-        if (operation === "search") return response();
-        if (operation === "rebuildIndex") return { started: true };
-        if (operation === "config") return { timeFormat: savedFormat ?? "relative" };
-        if (operation === "setConfig") { savedFormat = input.timeFormat; return { timeFormat: input.timeFormat }; }
+        if (operation === SEARCH_OPERATION) return response();
+        if (operation === REBUILD_INDEX_OPERATION) return { started: true };
+        if (operation === CONFIG_OPERATION) return { timeFormat: savedFormat ?? "relative" };
+        if (operation === SET_CONFIG_OPERATION) { savedFormat = input.timeFormat; return { timeFormat: input.timeFormat }; }
         return {};
       },
     }),
@@ -111,7 +117,7 @@ input.value = "rollback";
 input.dispatchEvent(new window.Event("input"));
 await new Promise((resolve) => setTimeout(resolve, 350));
 
-assert(requests.some((request) => request.operation === "search"), "the query reached the peer");
+assert(requests.some((request) => request.operation === SEARCH_OPERATION), "the query reached the peer");
 const rows = [...element.shadowRoot.querySelectorAll("[data-hit]")];
 assert(rows.length === 2, `two rows rendered (${String(rows.length)})`);
 assert(element.shadowRoot.querySelector("mark")?.textContent === "rollback", "the match is marked");
@@ -143,7 +149,7 @@ const sessionMeta = element.shadowRoot.querySelector(".session-meta")?.textConte
 assert(/2026-11-\d\d/.test(sessionMeta), `the session header shows an absolute time (${sessionMeta})`);
 assert(!sessionMeta.includes("ago"), "the relative phrase is gone");
 assert(formatButton.textContent === "Time: %Y-%m-%d %H:%M:%S", `the footer names the pattern (${formatButton.textContent})`);
-assert(requests.some((request) => request.operation === "config"), "the panel read the shared configuration");
+assert(requests.some((request) => request.operation === CONFIG_OPERATION), "the panel read the shared configuration");
 assert((element.shadowRoot.querySelector("[data-hit]")?.title ?? "").match(/^\d{4}-\d{2}-\d{2} /) !== null, "the tooltip is always absolute");
 
 console.log("panel smoke: ok");

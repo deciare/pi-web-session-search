@@ -1,10 +1,12 @@
+import {
+  CONFIG_OPERATION,
+  REBUILD_INDEX_OPERATION,
+  SEARCH_OPERATION,
+  SET_CONFIG_OPERATION,
+} from "./operations.js";
 import { DEFAULT_ABSOLUTE_PATTERN, RELATIVE, formatTimestamp, normalizeTimeFormat } from "./timeFormat.js";
 
 export const PANEL_TAG = "session-search-panel";
-const SEARCH_OPERATION = "search";
-const REBUILD_OPERATION = "rebuildIndex";
-const CONFIG_OPERATION = "config";
-const SET_CONFIG_OPERATION = "setConfig";
 const DEBOUNCE_MS = 200;
 const REBUILD_POLL_MS = 1500;
 
@@ -257,7 +259,7 @@ class SessionSearchPanel extends HTMLElement {
     if (backend === undefined) return;
     this.#rebuildButton.disabled = true;
     try {
-      await backend.request(REBUILD_OPERATION, {});
+      await backend.request(REBUILD_INDEX_OPERATION, {});
     } catch (error) {
       this.#error = this.#text("failed", { message: messageOf(error) });
     } finally {
