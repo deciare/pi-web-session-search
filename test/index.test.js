@@ -6,8 +6,10 @@ import { rename, rm, stat, truncate, utimes, writeFile } from "node:fs/promises"
 import { DatabaseSync } from "node:sqlite";
 import { SearchIndex } from "../search/index-store.js";
 import {
+  askResult,
   cleanup,
   contentMessage,
+  customMessage,
   makeCorpus,
   sessionHeader,
   sessionInfo,
@@ -318,9 +320,16 @@ test("index and scan agree on the same corpus", async (t) => {
     sessionHeader("s2", "/other"),
     textMessage("n1", null, "user", "no mention"),
     textMessage("n2", "n1", "assistant", "another ROLLBACK"),
+    askResult("q1", "n2", {
+      ask: {
+        askId: "ask-1", askedAt: "2026-11-05T21:04:10.037Z",
+        questions: [{ id: "q", question: "Which way on the rollback?", options: [{ value: "a", label: "Keep the rollback" }] }],
+      },
+    }),
+    customMessage("a1", "q1", "The user submitted answers to your questions.", undefined, { customType: "pi-web.ask.answers" }),
   ]);
   const { index } = makeIndex(corpus);
-  const queries = ["rollback", "resolvePlugin", "ROLLBACK", "plan"];
+  const queries = ["rollback", "resolvePlugin", "ROLLBACK", "plan", "Which way", "submitted answers"];
   const scanned = new Map();
   for (const query of queries) {
     const result = await index.search({ query });

@@ -1,6 +1,6 @@
 import { listCandidates } from "./corpus.js";
 import { readLines } from "./jsonl.js";
-import { isRecord, messageText } from "./predicate.js";
+import { entrySearchText, isRecord } from "./predicate.js";
 import { activeBranch, entryLink, lineMayMatch } from "./session-file.js";
 import { matchSnippet } from "./snippets.js";
 
@@ -129,17 +129,15 @@ async function scanFile(path, query, needle, deadline, now, signal) {
       if (isRecord(parsed) && typeof parsed["name"] === "string") name = parsed["name"] === "" ? undefined : parsed["name"];
       continue;
     }
-    if (link.type !== "message") continue;
+    if (link.type !== "message" && link.type !== "custom_message") continue;
     if (!lineMayMatch(line.text, needle)) continue;
     const parsed = tryParse(line.text);
-    if (!isRecord(parsed)) continue;
-    const text = messageText(parsed["message"]);
-    if (text === undefined || !text.toLowerCase().includes(query.toLowerCase())) continue;
-    const message = parsed["message"];
+    const searchable = entrySearchText(parsed);
+    if (searchable === undefined || !searchable.text.toLowerCase().includes(query.toLowerCase())) continue;
     messages.push({
       id: link.id,
-      role: String(isRecord(message) ? message["role"] : ""),
-      text,
+      role: searchable.role,
+      text: searchable.text,
       timestamp: typeof parsed["timestamp"] === "string" ? parsed["timestamp"] : undefined,
       start: line.start,
     });

@@ -11,8 +11,16 @@ from that plan.
 ## What is searchable
 
 - `user` and `assistant` messages, and only their `type: "text"` blocks. Never
-  thinking blocks, tool calls, tool results, system messages, or the displayed
-  custom messages the host generates for itself (ask answers).
+  thinking blocks, tool calls or tool output.
+- **Ask cards.** The question text, its supporting line, and the option labels
+  the card offers. The card is rendered from a successful `ask_user` tool
+  result's persisted `details`, so it is conversation rather than tool output;
+  the model-facing result text is not indexed, and neither is option `detail`
+  prose (it is behind a disclosure and reads like boilerplate).
+- **Host notes the transcript displays**, such as the answer summary written
+  after an ask is submitted. Their content is visible to the reader, so a hit
+  can scroll to it. Custom messages with `display: false` stay out, as does
+  every other system message.
 - The **active branch only**: the transcript shows one root-to-leaf chain, and a
   hit the reader cannot see would be a bug. Rewinding history inside a session
   moves the leaf, and the abandoned branch stops being searchable on the next
@@ -142,6 +150,11 @@ The scan reads every transcript, so its cost tracks corpus size.
 
 ## Deviations from the plan
 
+- **The corpus is wider than "message entries only".** The plan as first written
+  made only `message` entries candidates, which left ask cards and answer
+  summaries unsearchable even though both are visible in the transcript. The
+  predicate covers them explicitly now, and the plan says so; `search/predicate.js`
+  is still the one definition both paths use.
 - **`position` in the FTS5 table has no declared type.** FTS5 column definitions
   are `name [UNINDEXED]`; `position INTEGER UNINDEXED` is a parse error. The
   plan's schema as written does not create. `position` is a byte offset in the
@@ -174,7 +187,7 @@ The scan reads every transcript, so its cost tracks corpus size.
   live copy.
 - **The index tracks file modification time.** Two sessions edited within the
   same millisecond tie-break by session id, which is stable but arbitrary.
-- **A snippet comes from the first 64,000 characters of the message.** That is
+- **A snippet comes from the first 64,000 characters of the entry.** That is
   far above this corpus's longest message (18 KB), and it keeps a page of hits
   under the paired transport's 8 MB response limit. A longer message is still
   matched on its full text; only its snippet shows the start of the message and
@@ -191,9 +204,11 @@ The scan reads every transcript, so its cost tracks corpus size.
 ```sh
 cd /data/home/src/pi-web-session-search
 node --test test/*.test.js
+PI_WEB_ROOT=/data/home/src/pi-web node scripts/panel-smoke.js
 ```
 
-31 tests: block filtering (thinking and tool output excluded), compaction
+33 tests: block filtering (thinking and tool output excluded), ask cards and
+answer notes (including a hidden note and a failed ask), compaction
 exclusion with pre-compaction messages retained, abandoned branches, torn last
 lines, the raw-line prefilter's safety conditions, snippet offsets, per-session
 caps and scan truncation, archive marking and the live-copy preference,
@@ -201,3 +216,10 @@ incremental appends, branch-change reindexing, same-size rewrites, an emptied
 transcript, a path reused by another session, naming, durability against a
 missing/empty/corrupt/deleted/truncated index file, rebuild equivalence, dropped
 sessions, index/scan agreement across queries, and cursor paging without gaps.
+
+The browser half has no unit tests — it is one custom element and a
+contribution. `scripts/panel-smoke.js` renders it in the pi-web checkout's
+happy-dom with a fake backend and checks the module graph, the localized title,
+the peer request, the rows and their role labels, the marked match, and the
+navigation call (session, entry, `view: "chat"`, and the workspace resolved from
+the hit's cwd).

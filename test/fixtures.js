@@ -43,8 +43,18 @@ export function compaction(id, parentId, summary, timestamp = T0) {
   return { type: "compaction", id, parentId, timestamp, summary, firstKeptEntryId: id, tokensBefore: 1 };
 }
 
-export function customMessage(id, parentId, content, timestamp = T0) {
-  return { type: "custom_message", id, parentId, timestamp, customType: "test", content, display: true };
+export function customMessage(id, parentId, content, timestamp = T0, { display = true, customType = "test" } = {}) {
+  return { type: "custom_message", id, parentId, timestamp, customType, content, display };
+}
+
+export function askResult(id, parentId, details, { content = "Tool finished.", isError = false, timestamp = T0 } = {}) {
+  return {
+    type: "message",
+    id,
+    parentId,
+    timestamp,
+    message: { role: "toolResult", toolName: "ask_user", toolCallId: "call-1", content, details, isError },
+  };
 }
 
 /**

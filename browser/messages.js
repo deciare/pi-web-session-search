@@ -21,6 +21,8 @@ export function createSearchMessages(localization) {
     archived: message("archived", "Badge marking an archived session"),
     user: message("you", "Role label for a user message hit"),
     assistant: message("assistant", "Role label for an assistant message hit"),
+    question: message("question", "Role label for an ask-card hit"),
+    note: message("note", "Role label for a host note hit, such as an answer summary"),
     openFailed: message("Could not open that session: {message}", "Navigation failed; message is the error text"),
   };
 }

@@ -1,5 +1,5 @@
 import { readLines } from "./jsonl.js";
-import { isRecord, messageText, TEXT_BLOCK_MARKER } from "./predicate.js";
+import { entrySearchText, isRecord, TEXT_BLOCK_MARKER } from "./predicate.js";
 
 const LINK_PATTERN = /^\{"type":"([a-z_]+)","id":"([^"]+)","parentId":(null|"([^"]+)")/u;
 
@@ -46,16 +46,14 @@ export async function readSessionFile(filePath, startByte = 0) {
       if (isRecord(parsed) && typeof parsed["name"] === "string") name = parsed["name"];
       continue;
     }
-    if (link.type !== "message") continue;
+    if (link.type !== "message" && link.type !== "custom_message") continue;
     const parsed = tryParse(line.text);
-    if (!isRecord(parsed)) continue;
-    const message = parsed["message"];
-    const text = messageText(message);
-    if (text === undefined) continue;
+    const searchable = entrySearchText(parsed);
+    if (searchable === undefined) continue;
     messages.push({
       id: link.id,
-      role: String(isRecord(message) ? message["role"] : ""),
-      text,
+      role: searchable.role,
+      text: searchable.text,
       timestamp: typeof parsed["timestamp"] === "string" ? parsed["timestamp"] : undefined,
       start: line.start,
     });

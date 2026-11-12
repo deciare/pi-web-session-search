@@ -384,13 +384,20 @@ class SessionSearchPanel extends HTMLElement {
     row.setAttribute("data-hit", String(index));
     row.title = hit.session?.modified ?? "";
     const role = document.createElement("span");
-    role.className = `role ${hit.role === "user" ? "user" : "assistant"}`;
-    role.textContent = hit.role === "user" ? this.#text("user") : this.#text("assistant");
+    role.className = `role ${hit.role === "user" ? "user" : hit.role === "assistant" ? "assistant" : "other"}`;
+    role.textContent = this.#roleLabel(hit.role);
     const text = document.createElement("span");
     text.className = "hit-text";
     appendHighlighted(text, hit.snippet ?? "", this.#query.trim());
     row.append(role, text);
     return row;
+  }
+
+  #roleLabel(role) {
+    if (role === "user") return this.#text("user");
+    if (role === "assistant") return this.#text("assistant");
+    if (role === "tool") return this.#text("question");
+    return this.#text("note");
   }
 
   #text(key, values) {

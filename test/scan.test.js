@@ -3,9 +3,11 @@ import test from "node:test";
 import { appendFile, writeFile } from "node:fs/promises";
 import { scanSessions } from "../search/scanner.js";
 import {
+  askResult,
   cleanup,
   compaction,
   contentMessage,
+  customMessage,
   makeCorpus,
   sessionHeader,
   textMessage,
@@ -33,6 +35,61 @@ test("only text blocks are searchable", async (t) => {
   const roll = await scanSessions(corpus, query("roll"));
   assert.equal(roll.total, 1);
   assert.equal(roll.sessions[0].hits[0].entryId, "m1");
+});
+
+test("ask cards and their answer notes are searchable, tool output is not", async (t) => {
+  const corpus = await makeCorpus();
+  t.after(() => cleanup(corpus));
+  await writeSession(corpus, "a.jsonl", [
+    sessionHeader("s1"),
+    textMessage("m1", null, "user", "ordinary words"),
+    askResult("q1", "m1", {
+      ask: {
+        askId: "ask-1",
+        askedAt: "2026-11-05T21:04:10.037Z",
+        questions: [{
+          id: "scheduler",
+          question: "Which way on the scheduler?",
+          detail: "The plugin or the file-native one.",
+          options: [
+            { value: "build-first", label: "Build the file-native scheduler", detail: "Long option prose about trade-offs." },
+            { value: "wait", label: "Not yet" },
+          ],
+        }],
+      },
+    }, { content: "Ask_user completed; opaque tool output about wombats." }),
+    customMessage("a1", "q1", "The user submitted answers to your questions.\n\n- scheduler: Which way on the scheduler?\n  Answered: selected build-first", "2026-11-05T21:24:28.880Z", { customType: "pi-web.ask.answers" }),
+  ]);
+
+  for (const term of ["scheduler", "file-native", "submitted answers", "file-native scheduler"]) {
+    const hit = await scanSessions(corpus, { query: term, includeArchived: true });
+    assert.ok(hit.total > 0, term);
+  }
+  // Tool output is not part of the conversation.
+  assert.equal((await scanSessions(corpus, query("wombats"))).total, 0);
+  // Option detail prose is not indexed; labels are.
+  assert.equal((await scanSessions(corpus, query("trade-offs"))).total, 0);
+
+  const card = await scanSessions(corpus, query("Which way"));
+  assert.equal(card.sessions[0].hits[0].entryId, "q1");
+  assert.equal(card.sessions[0].hits[0].role, "tool");
+  const note = await scanSessions(corpus, query("submitted answers"));
+  assert.equal(note.sessions[0].hits[0].entryId, "a1");
+  assert.equal(note.sessions[0].hits[0].role, "system");
+});
+
+test("a hidden custom message and a failed ask are outside the corpus", async (t) => {
+  const corpus = await makeCorpus();
+  t.after(() => cleanup(corpus));
+  await writeSession(corpus, "a.jsonl", [
+    sessionHeader("s1"),
+    customMessage("h1", null, "hidden quokka note", undefined, { display: false }),
+    askResult("f1", "h1", {
+      ask: { askId: "a", askedAt: "2026-11-05T21:04:10.037Z", questions: [{ id: "q", question: "failed narwhal question", options: [] }] },
+    }, { isError: true }),
+  ]);
+  assert.equal((await scanSessions(corpus, query("quokka"))).total, 0);
+  assert.equal((await scanSessions(corpus, query("narwhal"))).total, 0);
 });
 
 test("pre-compaction messages stay searchable", async (t) => {
