@@ -88,7 +88,7 @@ try {
 }
 
 console.log(`installed ${packageName} to ${destination}`);
-console.log("restart the session daemon, then reload the browser page");
+console.log("reload the browser page; restart the session daemon if the server half changed");
 
 async function isOurs(directory) {
   try {

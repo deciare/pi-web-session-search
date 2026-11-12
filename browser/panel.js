@@ -521,10 +521,11 @@ class SessionSearchPanel extends HTMLElement {
     const row = document.createElement("button");
     row.type = "button";
     row.className = "hit";
+    row.dataset["role"] = hit.role ?? "";
     row.setAttribute("data-hit", String(index));
     row.title = formatTimestamp(hit.session?.modified, DEFAULT_ABSOLUTE_PATTERN, this.#localization);
     const role = document.createElement("span");
-    role.className = `role ${hit.role === "user" ? "user" : hit.role === "assistant" ? "assistant" : "other"}`;
+    role.className = "role";
     role.textContent = this.#roleLabel(hit.role);
     const text = document.createElement("span");
     text.className = "hit-text";
@@ -595,17 +596,30 @@ function styleSheet() {
     .status { padding: 4px 10px; font-size: 0.85em; color: var(--pi-muted, inherit); }
     .status:empty { display: none; }
     .results { flex: 1; min-height: 0; overflow-y: auto; padding: 0 4px 8px; }
-    .session { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; padding: 10px 6px 4px; }
-    .session-name { font-weight: 600; }
-    .session-meta { font-size: 0.8em; color: var(--pi-muted, inherit); }
+    /* A session group reads as one block: a surface chip carrying the title,
+       then its hits, each with a role-coloured edge and label. */
+    .session { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 10px 2px 2px;
+      padding: 6px 8px; border-radius: 6px;
+      background: color-mix(in srgb, var(--pi-surface, #101527) 55%, transparent);
+      border-inline-start: 3px solid var(--pi-accent-border, var(--pi-border, currentColor)); }
+    .session-name { color: var(--pi-text-bright, var(--pi-text, inherit)); font-weight: 650; font-size: 1.02em; }
+    .session-meta { margin-inline-start: auto; font-size: 0.78em; color: var(--pi-dim, var(--pi-muted, inherit)); }
     .badge { font-size: 0.75em; padding: 1px 6px; border-radius: 999px;
       border: 1px solid var(--pi-border, currentColor); color: var(--pi-muted, inherit); }
-    .hit { display: block; width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer;
-      padding: 6px; border: 0; border-radius: 6px; background: transparent; }
+    .hit { --role-color: var(--pi-muted, currentColor);
+      display: grid; grid-template-columns: 6em minmax(0, 1fr); column-gap: 8px; align-items: baseline;
+      width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer;
+      padding: 6px 8px 6px 10px; border: 0; border-inline-start: 2px solid var(--role-color);
+      border-radius: 6px; background: transparent; }
+    /* Role hues come from the theme's own palette, so a theme change carries. */
+    .hit[data-role="user"] { --role-color: var(--pi-purple, var(--pi-accent, currentColor)); }
+    .hit[data-role="assistant"] { --role-color: var(--pi-text-secondary, currentColor); }
+    .hit[data-role="tool"] { --role-color: var(--pi-warning, #ffb000); }
+    .hit[data-role="system"] { --role-color: var(--pi-dim, var(--pi-muted, currentColor)); }
     .hit:hover, .hit:focus-visible { background: var(--pi-surface-hover, color-mix(in srgb, currentColor 8%, transparent)); }
     .hit:focus-visible { outline: 2px solid var(--pi-accent, currentColor); outline-offset: -2px; }
-    .role { display: inline-block; min-width: 5.5em; font-size: 0.75em; text-transform: uppercase;
-      letter-spacing: 0.04em; color: var(--pi-muted, inherit); }
+    .role { font-size: 0.72em; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--role-color); }
     .hit-text { white-space: normal; overflow-wrap: anywhere; }
     mark { background: var(--pi-warning, #ffb000); color: var(--pi-bg, #000); border-radius: 2px; padding: 0 1px; }
     .empty { color: var(--pi-muted, inherit); padding: 12px 6px; }
