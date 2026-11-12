@@ -61,10 +61,12 @@ support procedure.
   state, never half a session.
 - **Incremental sync** reads only bytes past the last complete line, and only
   when the first new entry chains from the previously indexed leaf. A branch
-  change, a shrink, or a path change reindexes that session from zero; a file
-  that only gained a torn line is left alone. `leaf_id` is the one column this
-  implementation adds to the planned `sync_state`, and it is what makes the
-  chain check cheap.
+  change, a shrink, a path change, or a rewrite that keeps the size but changes
+  the mtime reindexes that session from zero; a file that only gained a torn
+  line is left alone. `leaf_id` is the one column this implementation adds to
+  the planned `sync_state`, and it is what makes the chain check cheap.
+- **One unreadable transcript does not discard the index.** A per-file read
+  failure is logged once and skipped; only an index failure rebuilds it.
 - **Interrupted builds** are the same as no build: `completeSinceRestart` stays
   false until a full pass over the corpus succeeds, and until then every query
   is answered by the scan. This is the only way a partially built index cannot
@@ -172,6 +174,11 @@ The scan reads every transcript, so its cost tracks corpus size.
   live copy.
 - **The index tracks file modification time.** Two sessions edited within the
   same millisecond tie-break by session id, which is stable but arbitrary.
+- **A snippet comes from the first 64,000 characters of the message.** That is
+  far above this corpus's longest message (18 KB), and it keeps a page of hits
+  under the paired transport's 8 MB response limit. A longer message is still
+  matched on its full text; only its snippet shows the start of the message and
+  reports no match offset.
 - **No permission or privacy boundary beyond the host's own.** Anyone who can
   open the PI WEB instance on this machine can search these transcripts, because
   the transcripts are already theirs. The plugin adds no network surface: the
@@ -186,10 +193,11 @@ cd /data/home/src/pi-web-session-search
 node --test test/*.test.js
 ```
 
-28 tests: block filtering (thinking and tool output excluded), compaction
+31 tests: block filtering (thinking and tool output excluded), compaction
 exclusion with pre-compaction messages retained, abandoned branches, torn last
 lines, the raw-line prefilter's safety conditions, snippet offsets, per-session
 caps and scan truncation, archive marking and the live-copy preference,
-incremental appends, branch-change reindexing, naming, durability against a
+incremental appends, branch-change reindexing, same-size rewrites, an emptied
+transcript, a path reused by another session, naming, durability against a
 missing/empty/corrupt/deleted/truncated index file, rebuild equivalence, dropped
 sessions, index/scan agreement across queries, and cursor paging without gaps.

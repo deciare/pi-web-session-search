@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { randomBytes } from "node:crypto";
 import { appendFile } from "node:fs/promises";
-import { rename, rm, stat, truncate, writeFile } from "node:fs/promises";
+import { rename, rm, stat, truncate, utimes, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { SearchIndex } from "../search/index-store.js";
 import {
@@ -247,6 +247,50 @@ test("rebuild restarts an identical index", async (t) => {
   const after = await index.search({ query: "rollback" });
   assert.equal(after.source, "index");
   assert.deepEqual(after.hits.map((hit) => hit.entryId), before.hits.map((hit) => hit.entryId));
+  index.dispose();
+});
+
+test("an emptied transcript drops its hits without failing the pass", async (t) => {
+  const corpus = await basicCorpus();
+  t.after(() => cleanup(corpus));
+  const { index } = makeIndex(corpus);
+  await index.runPass();
+  assert.equal((await index.search({ query: "rollback" })).hits.length, 1);
+  await writeFile(`${corpus.sessionDir}/--work--/a.jsonl`, "");
+  await index.runPass();
+  assert.equal(index.completeSinceRestart, true);
+  assert.equal((await index.search({ query: "rollback" })).hits.length, 0);
+  index.dispose();
+});
+
+test("a path reused by another session replaces the old session's rows", async (t) => {
+  const corpus = await basicCorpus();
+  t.after(() => cleanup(corpus));
+  const { index } = makeIndex(corpus);
+  await index.runPass();
+  await writeSession(corpus, "a.jsonl", [sessionHeader("s2"), textMessage("x1", null, "user", "a kangaroo now")]);
+  await index.runPass();
+  assert.equal((await index.search({ query: "rollback" })).hits.length, 0);
+  const hit = await index.search({ query: "kangaroo" });
+  assert.equal(hit.hits[0].sessionId, "s2");
+  assert.equal(hit.hits[0].entryId, "x1");
+  index.dispose();
+});
+
+test("a rewrite at the same size is reindexed rather than trusted to the cursor", async (t) => {
+  const corpus = await makeCorpus();
+  t.after(() => cleanup(corpus));
+  const path = await writeSession(corpus, "a.jsonl", [sessionHeader("s1"), textMessage("m1", null, "user", "alpha")]);
+  const { index } = makeIndex(corpus);
+  await index.runPass();
+  assert.equal((await index.search({ query: "alpha" })).hits.length, 1);
+
+  await writeSession(corpus, "a.jsonl", [sessionHeader("s1"), textMessage("m1", null, "user", "alphb")]);
+  const later = new Date(Date.now() + 5_000);
+  await utimes(path, later, later);
+  await index.runPass();
+  assert.equal((await index.search({ query: "alpha" })).hits.length, 0);
+  assert.equal((await index.search({ query: "alphb" })).hits[0].entryId, "m1");
   index.dispose();
 });
 

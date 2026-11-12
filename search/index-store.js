@@ -10,7 +10,7 @@ import { matchSnippet } from "./snippets.js";
 const SCHEMA_VERSION = 1;
 const INSERT_BATCH_ROWS = 250;
 const SYNC_INTERVAL_MS = 5000;
-const MAX_QUERY_TEXT = 200_000;
+const MAX_QUERY_TEXT = 64_000;
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 
@@ -152,7 +152,13 @@ export class SearchIndex {
       this.build.total = candidates.length;
       for (const candidate of candidates) {
         if (this.disposed) return;
-        await this.syncFile(candidate);
+        try {
+          await this.syncFile(candidate);
+        } catch (error) {
+          // One unreadable transcript is not a reason to discard the index.
+          if (isIndexFailure(error)) throw error;
+          this.logOnce(`file:${candidate.path}`, "warn", `could not index ${candidate.path}: ${messageOf(error)}`);
+        }
         this.build.done += 1;
         await this.yieldTo();
       }
@@ -384,11 +390,14 @@ export class SearchIndex {
 
   async syncFile(candidate) {
     const { write } = this.openHandles();
-    let row = write.prepare("SELECT * FROM sync_state WHERE path = ?").get(candidate.path);
+    const existing = write.prepare("SELECT * FROM sync_state WHERE path = ?").get(candidate.path);
+    let row = existing;
     if (row !== undefined && candidate.size < row.indexed_bytes) row = undefined;
     if (row !== undefined) {
       if (candidate.size === row.indexed_bytes) {
-        this.touch(write, row, candidate);
+        // An unchanged file is left alone; a rewrite at the same size cannot be
+        // trusted to the cursor, because only the bytes moved.
+        if (candidate.mtimeMs !== row.mtime_ms) await this.fullIndex(candidate, existing);
         return;
       }
       const increment = await readSessionFile(candidate.path, row.indexed_bytes);
@@ -402,7 +411,7 @@ export class SearchIndex {
         return;
       }
     }
-    await this.fullIndex(candidate, row);
+    await this.fullIndex(candidate, existing);
   }
 
   touch(write, row, candidate) {
@@ -433,24 +442,17 @@ export class SearchIndex {
     }
   }
 
-  async fullIndex(candidate, row) {
+  async fullIndex(candidate, previous) {
     const { write } = this.openHandles();
     const file = await readSessionFile(candidate.path, 0);
     const id = file.header?.id;
     if (id === undefined) {
-      if (row !== undefined) {
-        write.exec("BEGIN");
-        try {
-          write.prepare("DELETE FROM hits WHERE session_id = ?").run(row.session_id);
-          write.prepare("DELETE FROM sync_state WHERE session_id = ?").run(row.session_id);
-          write.exec("COMMIT");
-        } catch (error) {
-          write.exec("ROLLBACK");
-          throw error;
-        }
-      }
+      if (previous !== undefined) this.forgetSession(write, previous.session_id);
       return;
     }
+    // A path can be reused by a different session; the old session's rows are
+    // this path's previous occupant, not the new one's.
+    if (previous !== undefined && previous.session_id !== id) this.forgetSession(write, previous.session_id);
     const other = write.prepare("SELECT session_id, path, archived FROM sync_state WHERE session_id = ?").get(id);
     if (other !== undefined && other.path !== candidate.path
       && other.archived !== 1 && candidate.archived && existsSync(other.path)) {
@@ -480,6 +482,22 @@ export class SearchIndex {
     }
   }
 
+  forgetSession(write, sessionId) {
+    write.exec("BEGIN");
+    try {
+      write.prepare("DELETE FROM hits WHERE session_id = ?").run(sessionId);
+      write.prepare("DELETE FROM sync_state WHERE session_id = ?").run(sessionId);
+      write.exec("COMMIT");
+    } catch (error) {
+      try {
+        write.exec("ROLLBACK");
+      } catch {
+        // The failure path rebuilds the index.
+      }
+      throw error;
+    }
+  }
+
   async insertRows(write, sessionId, rows) {
     if (rows.length === 0) return;
     const insert = write.prepare("INSERT INTO hits(session_id, entry_id, role, ts, position, text) VALUES(?,?,?,?,?,?)");
@@ -495,15 +513,7 @@ export class SearchIndex {
     const rows = write.prepare("SELECT session_id, path FROM sync_state").all();
     for (const row of rows) {
       if (existsSync(row.path)) continue;
-      write.exec("BEGIN");
-      try {
-        write.prepare("DELETE FROM hits WHERE session_id = ?").run(row.session_id);
-        write.prepare("DELETE FROM sync_state WHERE session_id = ?").run(row.session_id);
-        write.exec("COMMIT");
-      } catch (error) {
-        write.exec("ROLLBACK");
-        throw error;
-      }
+      this.forgetSession(write, row.session_id);
     }
   }
 
@@ -581,4 +591,11 @@ function count(handle, sql) {
 
 function messageOf(error) {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Whether a failure is the index's own, which is handled by rebuilding it. */
+function isIndexFailure(error) {
+  if (typeof error?.errcode === "number") return true;
+  const message = messageOf(error);
+  return message.startsWith("index ") || message.startsWith("unexpected index");
 }
