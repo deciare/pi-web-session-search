@@ -69,10 +69,10 @@ let savedFormat;
 const response = (overrides) => ({
   hits: [
     { sessionId: "s1", entryId: "e9", role: "user", snippet: "…rollback plan…", matchStart: 4, matchLength: 8,
-      timestamp: "2026-11-11T00:00:00.000Z",
+      timestamp: "2026-11-10T12:34:56.000Z",
       session: { cwd: "/data/home/src", name: "A session", modified: "2026-11-11T00:00:00.000Z", archived: false } },
     { sessionId: "s1", entryId: "e10", role: "tool", snippet: "Which way on the scheduler?", matchStart: 0, matchLength: 6,
-      timestamp: "2026-11-11T00:00:00.000Z",
+      timestamp: "2026-11-09T01:02:03.000Z",
       session: { cwd: "/data/home/src", name: "A session", modified: "2026-11-11T00:00:00.000Z", archived: false } },
   ],
   total: 2, truncated: false, source: "index", indexing: { done: 3, total: 4, rebuilding: false }, ms: 4,
@@ -154,7 +154,11 @@ assert(/2026-11-\d\d/.test(sessionMeta), `the session header shows an absolute t
 assert(!sessionMeta.includes("ago"), "the relative phrase is gone");
 assert(formatButton.textContent === "Time: %Y-%m-%d %H:%M:%S", `the footer names the pattern (${formatButton.textContent})`);
 assert(requests.some((request) => request.operation === CONFIG_OPERATION), "the panel read the shared configuration");
-assert((element.shadowRoot.querySelector("[data-hit]")?.title ?? "").match(/^\d{4}-\d{2}-\d{2} /) !== null, "the tooltip is always absolute");
+const rowTitle = element.shadowRoot.querySelector("[data-hit]")?.title ?? "";
+const metaTitle = element.shadowRoot.querySelector(".session-meta")?.title ?? "";
+assert(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(rowTitle), `a row's tooltip is a full timestamp (${rowTitle})`);
+assert(rowTitle !== metaTitle, "a row's tooltip is the message time, not the session's");
+assert(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(metaTitle), `the header still names the session time (${metaTitle})`);
 
 console.log("panel smoke: ok");
 

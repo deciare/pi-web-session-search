@@ -540,7 +540,11 @@ class SessionSearchPanel extends HTMLElement {
     row.className = "hit";
     row.dataset["role"] = hit.role ?? "";
     row.setAttribute("data-hit", String(index));
-    row.title = formatTimestamp(hit.session?.modified, DEFAULT_ABSOLUTE_PATTERN, this.#localization);
+    // The row's own message time, not the session's last activity: the visible
+    // text has no time at all, so the tooltip adds information rather than
+    // repeating the header.
+    const hitTime = formatTimestamp(hit.timestamp, DEFAULT_ABSOLUTE_PATTERN, this.#localization);
+    if (hitTime !== "") row.title = hitTime;
     const role = document.createElement("span");
     role.className = "role";
     role.textContent = this.#roleLabel(hit.role);
