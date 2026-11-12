@@ -64,6 +64,7 @@ assert(panel !== undefined, "the plugin contributes a panel");
 assert(panel.title === "Search", `panel title is localized (${panel.title})`);
 
 const requests = [];
+let savedFormat;
 const response = (overrides) => ({
   hits: [
     { sessionId: "s1", entryId: "e9", role: "user", snippet: "…rollback plan…", matchStart: 4, matchLength: 8,
@@ -85,6 +86,8 @@ const context = {
         requests.push({ operation, input });
         if (operation === "search") return response();
         if (operation === "rebuildIndex") return { started: true };
+        if (operation === "config") return { timeFormat: savedFormat ?? "relative" };
+        if (operation === "setConfig") { savedFormat = input.timeFormat; return { timeFormat: input.timeFormat }; }
         return {};
       },
     }),
@@ -132,13 +135,15 @@ assert(dialog !== null && (dialog.hasAttribute("open") || dialog.open === true),
 const formatInput = dialog.querySelector("input.format");
 formatInput.value = "%Y-%m-%d %H:%M:%S";
 dialog.querySelector(".actions .primary").click();
+await new Promise((resolve) => setTimeout(resolve, 20));
+assert(savedFormat === "%Y-%m-%d %H:%M:%S", `the format was written through the peer (${String(savedFormat)})`);
 assert(dialog.hasAttribute("open") === false, "the dialog closed on save");
 
 const sessionMeta = element.shadowRoot.querySelector(".session-meta")?.textContent ?? "";
 assert(/2026-11-\d\d/.test(sessionMeta), `the session header shows an absolute time (${sessionMeta})`);
 assert(!sessionMeta.includes("ago"), "the relative phrase is gone");
 assert(formatButton.textContent === "Time: %Y-%m-%d %H:%M:%S", `the footer names the pattern (${formatButton.textContent})`);
-assert(window.localStorage.getItem("pi-web:session-search:time-format") === "%Y-%m-%d %H:%M:%S", "the choice is stored");
+assert(requests.some((request) => request.operation === "config"), "the panel read the shared configuration");
 assert((element.shadowRoot.querySelector("[data-hit]")?.title ?? "").match(/^\d{4}-\d{2}-\d{2} /) !== null, "the tooltip is always absolute");
 
 console.log("panel smoke: ok");

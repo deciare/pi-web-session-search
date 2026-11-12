@@ -18,6 +18,7 @@ export function createSearchMessages(localization) {
     timeFormatTitle: message("Time format", "Dialog title for choosing how timestamps are shown"),
     timeFormatLabel: message("Pattern, or relative", "Label for the timestamp format input"),
     timeFormatHint: message("relative shows “22 hours ago”. A pattern shows an absolute time: %Y year, %m month, %d day, %H hour (24h), %M minute, %S second, %p AM/PM, %b/%B month name, %a/%A weekday, %Z zone, %% a literal percent.", "Explanation of the timestamp format setting"),
+    timeFormatSaveFailed: message("Could not save the time format: {message}", "Writing settings.json failed; message is the error text"),
     cancel: message("Cancel", "Dismiss the dialog without saving"),
     save: message("Save", "Apply the timestamp format"),
     indexing: message("Indexing {done}/{total}", "Index build progress; done and total are file counts"),

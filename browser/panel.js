@@ -1,9 +1,10 @@
 import { DEFAULT_ABSOLUTE_PATTERN, RELATIVE, formatTimestamp, normalizeTimeFormat } from "./timeFormat.js";
 
 export const PANEL_TAG = "session-search-panel";
-const TIME_FORMAT_STORAGE_KEY = "pi-web:session-search:time-format";
 const SEARCH_OPERATION = "search";
 const REBUILD_OPERATION = "rebuildIndex";
+const CONFIG_OPERATION = "config";
+const SET_CONFIG_OPERATION = "setConfig";
 const DEBOUNCE_MS = 200;
 const REBUILD_POLL_MS = 1500;
 
@@ -32,7 +33,9 @@ class SessionSearchPanel extends HTMLElement {
   #formatHint;
   #formatCancel;
   #formatSave;
+  #formatError;
   #timeFormat = RELATIVE;
+  #configRequested = false;
   #results;
   #response;
   #error;
@@ -59,6 +62,7 @@ class SessionSearchPanel extends HTMLElement {
       this.#cursor = undefined;
     }
     this.#machineId = machineId;
+    void this.#loadConfig();
     if (this.#query === "" && rememberedQueries.has(machineId)) {
       this.#query = rememberedQueries.get(machineId);
       this.#input.value = this.#query;
@@ -78,7 +82,7 @@ class SessionSearchPanel extends HTMLElement {
   }
 
   connectedCallback() {
-    this.#timeFormat = readStoredTimeFormat();
+    void this.#loadConfig();
     this.#renderStatus();
     if (!this.#query && rememberedQueries.has(this.#machineId ?? "local")) {
       this.#query = rememberedQueries.get(this.#machineId ?? "local");
@@ -176,10 +180,33 @@ class SessionSearchPanel extends HTMLElement {
     }
   }
 
+  /** The shared format lives in the plugin's settings.json; read it once per connection. */
+  async #loadConfig() {
+    if (this.#configRequested) return;
+    const backend = this.#backend();
+    if (backend === undefined) return;
+    this.#configRequested = true;
+    try {
+      const config = await backend.request(CONFIG_OPERATION, {});
+      this.#timeFormat = normalizeTimeFormat(config?.timeFormat);
+      this.#renderStatus();
+      this.#renderResults();
+    } catch {
+      // Keep the default; a config read must never stop a search.
+      this.#configRequested = false;
+    }
+  }
+
+  #backend() {
+    const backend = this.#context?.backend?.forScope?.({ kind: "machine" });
+    return backend === undefined || typeof backend.request !== "function" ? undefined : backend;
+  }
+
   #openTimeFormat() {
     const dialog = this.#formatDialog;
     if (dialog === undefined) return;
     this.#formatInput.value = this.#timeFormat;
+    this.#formatError.textContent = "";
     if (typeof dialog.showModal === "function") dialog.showModal();
     else dialog.setAttribute("open", "");
     this.#formatInput.focus();
@@ -193,12 +220,26 @@ class SessionSearchPanel extends HTMLElement {
     else dialog.removeAttribute("open");
   }
 
-  #setTimeFormat(value) {
+  async #saveTimeFormat(value) {
+    const backend = this.#backend();
     const next = normalizeTimeFormat(value);
-    this.#timeFormat = next;
-    writeStoredTimeFormat(next);
-    this.#renderStatus();
-    this.#renderResults();
+    if (backend === undefined) {
+      this.#formatError.textContent = this.#text("unavailable");
+      return;
+    }
+    this.#formatSave.disabled = true;
+    try {
+      const saved = await backend.request(SET_CONFIG_OPERATION, { timeFormat: next });
+      this.#timeFormat = normalizeTimeFormat(saved?.timeFormat ?? next);
+      this.#formatError.textContent = "";
+      this.#renderStatus();
+      this.#renderResults();
+      this.#closeTimeFormat();
+    } catch (error) {
+      this.#formatError.textContent = this.#text("timeFormatSaveFailed", { message: messageOf(error) });
+    } finally {
+      this.#formatSave.disabled = false;
+    }
   }
 
   #scheduleRebuildPoll() {
@@ -346,6 +387,9 @@ class SessionSearchPanel extends HTMLElement {
     label.append(labelText, formatInput);
     const hint = document.createElement("p");
     hint.className = "hint";
+    const formatError = document.createElement("p");
+    formatError.className = "error";
+    formatError.setAttribute("role", "alert");
     const actions = document.createElement("div");
     actions.className = "actions";
     const cancel = document.createElement("button");
@@ -354,17 +398,13 @@ class SessionSearchPanel extends HTMLElement {
     save.type = "button";
     save.className = "primary";
     actions.append(cancel, save);
-    dialog.append(heading, label, hint, actions);
+    dialog.append(heading, label, hint, formatError, actions);
     cancel.addEventListener("click", () => this.#closeTimeFormat());
-    save.addEventListener("click", () => {
-      this.#setTimeFormat(formatInput.value);
-      this.#closeTimeFormat();
-    });
+    save.addEventListener("click", () => void this.#saveTimeFormat(formatInput.value));
     formatInput.addEventListener("keydown", (event) => {
       if (event.key !== "Enter") return;
       event.preventDefault();
-      this.#setTimeFormat(formatInput.value);
-      this.#closeTimeFormat();
+      void this.#saveTimeFormat(formatInput.value);
     });
     dialog.addEventListener("click", (event) => {
       // A click on the backdrop targets the dialog element itself.
@@ -377,6 +417,7 @@ class SessionSearchPanel extends HTMLElement {
     this.#formatHint = hint;
     this.#formatCancel = cancel;
     this.#formatSave = save;
+    this.#formatError = formatError;
 
     panel.append(searchRow, status, results, footer);
     root.append(panel, dialog);
@@ -535,22 +576,6 @@ function bestPathMatch(items, path) {
   return best;
 }
 
-function readStoredTimeFormat() {
-  try {
-    return normalizeTimeFormat(localStorage.getItem(TIME_FORMAT_STORAGE_KEY) ?? RELATIVE);
-  } catch {
-    return RELATIVE;
-  }
-}
-
-function writeStoredTimeFormat(value) {
-  try {
-    localStorage.setItem(TIME_FORMAT_STORAGE_KEY, value);
-  } catch {
-    // A preference that cannot be stored still applies to this page.
-  }
-}
-
 function messageOf(error) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -597,6 +622,8 @@ function styleSheet() {
       background: var(--pi-surface, transparent); color: inherit; }
     .time-dialog input.format:focus-visible { outline: 2px solid var(--pi-accent, currentColor); outline-offset: 1px; }
     .time-dialog .hint { margin: 10px 0 14px; font-size: 0.8em; line-height: 1.4; color: var(--pi-muted, inherit); }
+    .time-dialog .error { margin: 0 0 10px; font-size: 0.8em; color: var(--pi-danger, inherit); }
+    .time-dialog .error:empty { display: none; }
     .time-dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
     .time-dialog .actions button { font: inherit; color: inherit; cursor: pointer; border-radius: 6px;
       border: 1px solid var(--pi-border, color-mix(in srgb, currentColor 25%, transparent));
