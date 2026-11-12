@@ -10,10 +10,13 @@
 .results { flex: 1; min-height: 0; overflow-y: auto; padding: 0 4px 8px; }
 /* A session group reads as one block: a surface chip carrying the title,
    then its hits, each with a role-coloured edge and label. */
-.session { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 10px 2px 2px;
-  padding: 6px 8px; border-radius: 6px;
-  background: color-mix(in srgb, var(--pi-surface, #101527) 55%, transparent);
+/* One block per session: the group carries the frame, the header names it,
+   and the hits are its children, so a rule can address any of the three. */
+.session-group { margin: 10px 2px 4px; border-radius: 8px; overflow: hidden;
+  background: color-mix(in srgb, var(--pi-surface, #101527) 45%, transparent);
   border-inline-start: 3px solid var(--pi-accent-border, var(--pi-border, currentColor)); }
+.session { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px;
+  padding: 7px 8px 3px; }
 .session-name { color: var(--pi-text-bright, var(--pi-text, inherit)); font-weight: 650; font-size: 1.02em; }
 .session-meta { margin-inline-start: auto; font-size: 0.78em; color: var(--pi-dim, var(--pi-muted, inherit)); }
 .badge { font-size: 0.75em; padding: 1px 6px; border-radius: 999px;

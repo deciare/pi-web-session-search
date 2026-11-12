@@ -482,13 +482,22 @@ class SessionSearchPanel extends HTMLElement {
       }
     } else {
       let sessionId;
+      let group;
+      let groupIndex = 0;
       for (let index = 0; index < hits.length; index += 1) {
         const hit = hits[index];
         if (hit.sessionId !== sessionId) {
           sessionId = hit.sessionId;
-          fragment.append(this.#sessionHeader(hit));
+          group = document.createElement("section");
+          group.className = "session-group";
+          group.dataset["sessionId"] = sessionId;
+          const nameId = `session-group-${groupIndex}`;
+          groupIndex += 1;
+          group.setAttribute("aria-labelledby", nameId);
+          group.append(this.#sessionHeader(hit, nameId));
+          fragment.append(group);
         }
-        fragment.append(this.#hitRow(hit, index));
+        group.append(this.#hitRow(hit, index));
       }
       if (this.#cursor !== undefined) {
         const more = document.createElement("button");
@@ -502,11 +511,12 @@ class SessionSearchPanel extends HTMLElement {
     this.#results.replaceChildren(fragment);
   }
 
-  #sessionHeader(hit) {
+  #sessionHeader(hit, nameId) {
     const header = document.createElement("div");
     header.className = "session";
     const name = document.createElement("span");
     name.className = "session-name";
+    name.id = nameId;
     name.textContent = hit.session?.name ?? hit.session?.cwd ?? hit.sessionId;
     name.title = hit.sessionId;
     header.append(name);
